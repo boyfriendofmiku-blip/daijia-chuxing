@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>代驾出行</title>
+
+  <!-- PWA 配置 -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2C3E50" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="代驾" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+
+  <!-- 图标 -->
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-48.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+
+  <!-- 样式 -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- 腾讯地图 -->
+  <script src="https://map.qq.com/api/gljs?v=1.exp&key=OB4BZ-D4W3U-B7VVO-4PJWW-6TKDJ-WPB77"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- 动态渲染页面内容 -->
+  </div>
+  <script src="app-fixed.js"></script>
+  <script src="staff.js"></script>
+  <script>
+    // 注册 Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('SW 注册成功', reg.scope))
+          .catch(err => console.log('SW 注册失败', err));
+      });
+    }
+  </script>
+</body>
+</html>

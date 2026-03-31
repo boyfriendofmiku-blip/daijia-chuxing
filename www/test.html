@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>测试页面</title>
+</head>
+<body>
+  <h1>如果能看到这个页面，说明基础HTML加载正常</h1>
+  <div id="test">测试JavaScript加载...</div>
+  <script>
+    try {
+      document.getElementById('test').innerHTML = 'JavaScript运行正常！<br><br>时间: ' + new Date().toLocaleString();
+      document.getElementById('test').style.color = 'green';
+    } catch(e) {
+      document.getElementById('test').innerHTML = 'JavaScript错误: ' + e.message;
+      document.getElementById('test').style.color = 'red';
+    }
+  </script>
+</body>
+</html>

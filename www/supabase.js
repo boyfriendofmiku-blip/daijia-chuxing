@@ -323,3 +323,6 @@ const DB = {
       .subscribe();
   }
 };
+
+// 将DB对象挂载到window，确保其他文件可以访问
+window.DB = DB;

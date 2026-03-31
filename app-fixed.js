@@ -3,25 +3,32 @@
    安全 · 快捷 · 专业 · 多端同步
 ================================================ */
 
-// ============ 地图模块（保持不变） ============
-function initOrderMap(mapDivId, fromInputId, fromLatId, fromLngId, toInputId, toLatId, toLngId, searchInputId, searchResultsId, locateBtnId, toolInfoId) {
-  const mapDiv = document.getElementById(mapDivId);
-  const fromInput = document.getElementById(fromInputId);
-  const toInput = document.getElementById(toInputId);
-  const searchInput = document.getElementById(searchInputId);
-  const searchResults = document.getElementById(searchResultsId);
-  const locateBtn = document.getElementById(locateBtnId);
-  const toolInfo = document.getElementById(toolInfoId);
+// ============ 地图模块 ============
+// 初始化下单/创单页的交互式地图（支持路线规划）
+// opts: { mapDivId, fromInputId, fromLatId, fromLngId, toInputId, toLatId, toLngId,
+//         searchInputId, searchResultsId, locateBtnId, toolInfoId, routeInfoId }
+function initOrderMap(opts) {
+  var mapDiv = document.getElementById(opts.mapDivId);
+  var fromInput = document.getElementById(opts.fromInputId);
+  var toInput = document.getElementById(opts.toInputId);
+  var searchInput = document.getElementById(opts.searchInputId);
+  var searchResults = document.getElementById(opts.searchResultsId);
+  var locateBtn = document.getElementById(opts.locateBtnId);
+  var toolInfo = document.getElementById(opts.toolInfoId);
+  var routeInfoEl = document.getElementById(opts.routeInfoId);
   if (!mapDiv) return;
 
-  let selectMode = 'from';
-  let map = null;
-  let fromMarker = null;
-  let toMarker = null;
-  let geocoder = null;
-  let searchTimer = null;
+  var selectMode = 'from';
+  var map = null;
+  var fromMarker = null;
+  var toMarker = null;
+  var geocoder = null;
+  var searchTimer = null;
+  var routeLine = null; // 路线折线对象
+  var routeDistance = 0; // 路线距离（米）
+  var routeDuration = 0; // 路线时间（秒）
 
-  const center = new TMap.LatLng(23.129, 113.264);
+  var center = new TMap.LatLng(23.129, 113.264);
   map = new TMap.Map(mapDiv, {
     center: center,
     zoom: 13,
@@ -31,8 +38,111 @@ function initOrderMap(mapDivId, fromInputId, fromLatId, fromLngId, toInputId, to
 
   geocoder = new TMap.service.Geocoder();
 
+  // 暴露给外部读取路线信息的接口
+  map._getRouteInfo = function() {
+    return { distance: routeDistance, duration: routeDuration };
+  };
+
   function updateInfo(text) {
     if (toolInfo) toolInfo.textContent = text;
+  }
+
+  // 更新路线信息显示
+  function updateRouteInfo(distance, duration) {
+    routeDistance = distance || 0;
+    routeDuration = duration || 0;
+    if (!routeInfoEl) return;
+    if (distance > 0) {
+      var distKm = distance >= 1000 ? (distance / 1000).toFixed(1) + ' km' : distance + ' m';
+      var durMin = Math.ceil(duration / 60);
+      var durText = durMin >= 60 ? Math.floor(durMin / 60) + '小时' + (durMin % 60) + '分钟' : durMin + '分钟';
+      routeInfoEl.innerHTML = '<div class="route-info-row"><span class="route-info-icon">🚗</span><span class="route-info-label">预估距离</span><span class="route-info-value">' + distKm + '</span></div>' +
+        '<div class="route-info-row"><span class="route-info-icon">⏱️</span><span class="route-info-label">预计时间</span><span class="route-info-value">' + durText + '</span></div>';
+      routeInfoEl.style.display = 'flex';
+    } else {
+      routeInfoEl.style.display = 'none';
+    }
+  }
+
+  // 清除路线
+  function clearRoute() {
+    if (routeLine) { routeLine.setMap(null); routeLine = null; }
+    routeDistance = 0;
+    routeDuration = 0;
+    updateRouteInfo(0, 0);
+  }
+
+  // 规划驾车路线
+  function planRoute() {
+    var fl = document.getElementById(opts.fromLatId);
+    var fg = document.getElementById(opts.fromLngId);
+    var tl = document.getElementById(opts.toLatId);
+    var tg = document.getElementById(opts.toLngId);
+    if (!fl || !fg || !tl || !tg || !fl.value || !fg.value || !tl.value || !tg.value) return;
+
+    clearRoute();
+    updateInfo('⏳ 规划路线中...');
+
+    var driving = new TMap.service.DrivingService({
+      complete: function(result) {
+        if (result && result.result && result.result.routes && result.result.routes.length > 0) {
+          var route = result.result.routes[0];
+          updateRouteInfo(route.distance, route.duration);
+
+          // 绘制路线
+          var path = [];
+          if (route.steps) {
+            route.steps.forEach(function(step) {
+              if (step.polyline) path = path.concat(step.polyline);
+            });
+          }
+          if (path.length > 0) {
+            routeLine = new TMap.MultiPolyline({
+              map: map,
+              styles: {
+                'route-style': new TMap.PolylineStyle({
+                  color: '#3777FF',
+                  width: 6,
+                  borderWidth: 2,
+                  borderColor: '#FFF',
+                  lineCap: 'round',
+                  lineJoin: 'round'
+                })
+              },
+              geometries: [{
+                id: 'route-line',
+                styleId: 'route-style',
+                paths: path
+              }]
+            });
+          }
+
+          // 调整视野
+          if (route.bounds) {
+            try {
+              map.fitBounds(new TMap.LatLngBounds(
+                new TMap.LatLng(route.bounds.southwest.lat, route.bounds.southwest.lng),
+                new TMap.LatLng(route.bounds.northeast.lat, route.bounds.northeast.lng)
+              ), { padding: 80 });
+            } catch(e) {}
+          }
+
+          updateInfo('✅ 路线规划完成');
+        } else {
+          // 没有路线结果，只显示标记点
+          updateInfo('⚠️ 未找到合适路线，已标记起终点');
+        }
+      },
+      error: function(err) {
+        console.warn('路线规划失败:', err);
+        updateInfo('📍 已标记起终点（路线规划暂不可用）');
+      }
+    });
+
+    driving.search({
+      from: new TMap.LatLng(parseFloat(fl.value), parseFloat(fg.value)),
+      to: new TMap.LatLng(parseFloat(tl.value), parseFloat(tg.value))
+    });
   }
 
   function updateMarker(type, lat, lng, address) {
@@ -44,12 +154,12 @@ function initOrderMap(mapDivId, fromInputId, fromLatId, fromLngId, toInputId, to
         geometries: [{
           id: 'from_marker',
           position: pos,
-          content: '<div style="background:#27AE60;color:#fff;padding:4px 10px;border-radius:20px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative"><span style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #27AE60"></span>🟢 出发地</div>'
+          content: '<div style="background:#27AE60;color:#fff;padding:4px 10px;border-radius:20px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative"><span style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #27AE60"></span>🟢 出发</div>'
         }]
       });
       if (fromInput) fromInput.value = address;
-      var fl = document.getElementById(fromLatId);
-      var fg = document.getElementById(fromLngId);
+      var fl = document.getElementById(opts.fromLatId);
+      var fg = document.getElementById(opts.fromLngId);
       if (fl) fl.value = lat;
       if (fg) fg.value = lng;
     } else {
@@ -63,22 +173,19 @@ function initOrderMap(mapDivId, fromInputId, fromLatId, fromLngId, toInputId, to
         }]
       });
       if (toInput) toInput.value = address;
-      var tl = document.getElementById(toLatId);
-      var tg = document.getElementById(toLngId);
+      var tl = document.getElementById(opts.toLatId);
+      var tg = document.getElementById(opts.toLngId);
       if (tl) tl.value = lat;
       if (tg) tg.value = lng;
     }
-    var bounds = [];
-    if (fromMarker) bounds.push(new TMap.LatLng(
-      document.getElementById(fromLatId).value,
-      document.getElementById(fromLngId).value
-    ));
-    if (toMarker) bounds.push(new TMap.LatLng(
-      document.getElementById(toLatId).value,
-      document.getElementById(toLngId).value
-    ));
-    if (bounds.length === 2) {
-      map.fitBounds(new TMap.LatLngBounds(bounds), { padding: 60 });
+
+    // 如果起终点都设了，自动规划路线
+    var fLat = document.getElementById(opts.fromLatId);
+    var fLng = document.getElementById(opts.fromLngId);
+    var tLat = document.getElementById(opts.toLatId);
+    var tLng = document.getElementById(opts.toLngId);
+    if (fLat && fLat.value && fLng && fLng.value && tLat && tLat.value && tLng && tLng.value) {
+      planRoute();
     }
   }
 
@@ -224,6 +331,103 @@ function initOrderMap(mapDivId, fromInputId, fromLatId, fromLngId, toInputId, to
   } else {
     updateInfo('📍 点击地图选择位置');
   }
+
+  return map; // 返回map实例，供外部使用
+}
+
+// ============ 路线展示地图（只读，用于订单详情/接单大厅） ============
+// 在指定div中展示起终点路线，可选回调获取路线信息
+function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) {
+  var mapDiv = document.getElementById(mapDivId);
+  if (!mapDiv) return null;
+  options = options || {};
+
+  var map = new TMap.Map(mapDiv, {
+    center: new TMap.LatLng(fromLat, fromLng),
+    zoom: 12,
+    pitch: 20,
+    mapStyleId: 'style1',
+    disableZoom: options.disableZoom || false
+  });
+
+  // 起终点标记
+  new TMap.MultiMarker({
+    map: map,
+    geometries: [
+      {
+        id: 'start',
+        position: new TMap.LatLng(fromLat, fromLng),
+        content: '<div style="background:#27AE60;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">A</div>'
+      },
+      {
+        id: 'end',
+        position: new TMap.LatLng(toLat, toLng),
+        content: '<div style="background:#E74C3C;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">B</div>'
+      }
+    ]
+  });
+
+  // 规划路线
+  var driving = new TMap.service.DrivingService({
+    complete: function(result) {
+      if (result && result.result && result.result.routes && result.result.routes.length > 0) {
+        var route = result.result.routes[0];
+
+        // 路线信息回调
+        if (options.onRouteReady) {
+          options.onRouteReady({ distance: route.distance, duration: route.duration });
+        }
+
+        // 绘制路线
+        var path = [];
+        if (route.steps) {
+          route.steps.forEach(function(step) {
+            if (step.polyline) path = path.concat(step.polyline);
+          });
+        }
+        if (path.length > 0) {
+          new TMap.MultiPolyline({
+            map: map,
+            styles: {
+              'style': new TMap.PolylineStyle({
+                color: '#3777FF',
+                width: 6,
+                borderWidth: 2,
+                borderColor: '#FFF',
+                lineCap: 'round',
+                lineJoin: 'round'
+              })
+            },
+            geometries: [{ id: 'line', styleId: 'style', paths: path }]
+          });
+        }
+
+        // 调整视野
+        if (route.bounds) {
+          try {
+            map.fitBounds(new TMap.LatLngBounds(
+              new TMap.LatLng(route.bounds.southwest.lat, route.bounds.southwest.lng),
+              new TMap.LatLng(route.bounds.northeast.lat, route.bounds.northeast.lng)
+            ), { padding: 40 });
+          } catch(e) {}
+        }
+      }
+    },
+    error: function() {
+      // 路线规划失败时只显示标记点
+      map.fitBounds(new TMap.LatLngBounds([
+        new TMap.LatLng(fromLat, fromLng),
+        new TMap.LatLng(toLat, toLng)
+      ]), { padding: 60 });
+    }
+  });
+
+  driving.search({
+    from: new TMap.LatLng(fromLat, fromLng),
+    to: new TMap.LatLng(toLat, toLng)
+  });
+
+  return map;
 }
 
 // ============ 全局状态 ============
@@ -529,6 +733,7 @@ function renderCreateOrder() {
         '<div class="map-search-bar"><div class="map-search-input-wrap"><span class="map-search-icon">🔍</span><input class="map-search-input" id="map-search-input" placeholder="搜索地点..." /></div></div>' +
         '<div class="map-search-results" id="map-search-results" style="display:none"></div>' +
         '<div class="map-toolbar"><button class="map-tool-btn" id="map-locate-btn" title="定位当前位置">📍</button><div class="map-tool-info" id="map-tool-info">点击地图选择位置</div></div>' +
+        '<div id="route-info" class="route-info-panel" style="display:none"></div>' +
       '</div>' +
       '<div class="card">' +
         '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-from" placeholder="请输入出发地址" readonly /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
@@ -827,6 +1032,7 @@ function renderDriverCreateOrder() {
         '<div class="map-search-bar"><div class="map-search-input-wrap"><span class="map-search-icon">🔍</span><input class="map-search-input" id="drv-map-search-input" placeholder="搜索地点..." /></div></div>' +
         '<div class="map-search-results" id="drv-map-search-results" style="display:none"></div>' +
         '<div class="map-toolbar"><button class="map-tool-btn" id="drv-map-locate-btn" title="定位当前位置">📍</button><div class="map-tool-info" id="drv-map-tool-info">点击地图选择位置</div></div>' +
+        '<div id="drv-route-info" class="route-info-panel" style="display:none"></div>' +
       '</div>' +
       '<div class="card">' +
         '<div class="form-group"><label>👤 客户姓名</label><input class="form-control" id="drv-co-name" placeholder="请输入客户姓名" /></div>' +
@@ -1136,11 +1342,25 @@ function bindEvents() {
   // ===== 地图初始化 =====
   var orderMapEl = document.getElementById('order-map');
   if (orderMapEl && typeof TMap !== 'undefined') {
-    initOrderMap('order-map', 'order-from', 'order-from-lat', 'order-from-lng', 'order-to', 'order-to-lat', 'order-to-lng', 'map-search-input', 'map-search-results', 'map-locate-btn', 'map-tool-info');
+    initOrderMap({
+      mapDivId: 'order-map',
+      fromInputId: 'order-from', fromLatId: 'order-from-lat', fromLngId: 'order-from-lng',
+      toInputId: 'order-to', toLatId: 'order-to-lat', toLngId: 'order-to-lng',
+      searchInputId: 'map-search-input', searchResultsId: 'map-search-results',
+      locateBtnId: 'map-locate-btn', toolInfoId: 'map-tool-info',
+      routeInfoId: 'route-info'
+    });
   }
   var drvMapEl = document.getElementById('drv-order-map');
   if (drvMapEl && typeof TMap !== 'undefined') {
-    initOrderMap('drv-order-map', 'drv-co-from', 'drv-co-from-lat', 'drv-co-from-lng', 'drv-co-to', 'drv-co-to-lat', 'drv-co-to-lng', 'drv-map-search-input', 'drv-map-search-results', 'drv-map-locate-btn', 'drv-map-tool-info');
+    initOrderMap({
+      mapDivId: 'drv-order-map',
+      fromInputId: 'drv-co-from', fromLatId: 'drv-co-from-lat', fromLngId: 'drv-co-from-lng',
+      toInputId: 'drv-co-to', toLatId: 'drv-co-to-lat', toLngId: 'drv-co-to-lng',
+      searchInputId: 'drv-map-search-input', searchResultsId: 'drv-map-search-results',
+      locateBtnId: 'drv-map-locate-btn', toolInfoId: 'drv-map-tool-info',
+      routeInfoId: 'drv-route-info'
+    });
   }
 
   // ===== 估算费用 =====

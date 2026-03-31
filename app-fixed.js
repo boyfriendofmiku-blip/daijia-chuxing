@@ -455,6 +455,163 @@ function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) 
   return map;
 }
 
+// ============ 地图全屏展开 ============
+function openMapFullscreen() {
+  if (!window.__detailRouteMap || typeof TMap === 'undefined') {
+    showToast('地图尚未加载完成', 'error');
+    return;
+  }
+
+  // 获取订单数据
+  var order = window.__lastDetailOrder || {};
+  var fromAddr = order.from || '出发地';
+  var toAddr = order.to || '目的地';
+  var routeInfo = window.__detailRouteInfo || {};
+  var distText = '';
+  if (routeInfo.distance) {
+    distText = routeInfo.distance >= 1000 ? (routeInfo.distance / 1000).toFixed(1) + ' km' : Math.round(routeInfo.distance) + ' m';
+  }
+  var durText = '';
+  if (routeInfo.duration) {
+    var mins = Math.round(routeInfo.duration / 60);
+    if (mins >= 60) {
+      durText = Math.floor(mins / 60) + '小时' + (mins % 60) + '分钟';
+    } else {
+      durText = mins + '分钟';
+    }
+  }
+
+  // 创建全屏覆盖层
+  var overlay = document.createElement('div');
+  overlay.className = 'map-fullscreen-overlay';
+  overlay.id = 'map-fullscreen-overlay';
+  overlay.innerHTML =
+    '<div class="map-fullscreen-header">' +
+      '<div class="map-fullscreen-title">行程路线</div>' +
+      '<button class="map-fullscreen-close" id="map-fs-close">✕</button>' +
+    '</div>' +
+    '<div class="map-fullscreen-container" id="map-fs-container"></div>' +
+    '<div class="map-fullscreen-route-info">' +
+      '<div class="route-endpoints">' +
+        '<div class="endpoint-item"><span class="endpoint-dot start"></span><span>' + fromAddr + '</span></div>' +
+        '<div class="endpoint-item"><span class="endpoint-dot end"></span><span>' + toAddr + '</span></div>' +
+      '</div>' +
+      (distText || durText ? '<div class="route-stats">' +
+        (distText ? '<span>📏 ' + distText + '</span>' : '') +
+        (durText ? '<span>🕐 约' + durText + '</span>' : '') +
+      '</div>' : '') +
+    '</div>';
+
+  document.body.appendChild(overlay);
+
+  // 等DOM渲染后创建地图
+  requestAnimationFrame(function() {
+    overlay.classList.add('active');
+
+    setTimeout(function() {
+      var container = document.getElementById('map-fs-container');
+      if (!container) return;
+
+      var order = window.__lastDetailOrder || {};
+      var fsMap = new TMap.Map(container, {
+        center: new TMap.LatLng(order.fromLat, order.fromLng),
+        zoom: 13,
+        pitch: 30,
+        mapStyleId: 'style1'
+      });
+
+      // 起终点标记
+      new TMap.MultiMarker({
+        map: fsMap,
+        geometries: [
+          {
+            id: 'start',
+            position: new TMap.LatLng(order.fromLat, order.fromLng),
+            content: '<div style="background:#27AE60;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(39,174,96,0.4)">A</div>'
+          },
+          {
+            id: 'end',
+            position: new TMap.LatLng(order.toLat, order.toLng),
+            content: '<div style="background:#E74C3C;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(231,76,60,0.4)">B</div>'
+          }
+        ]
+      });
+
+      // 重新规划路线
+      new TMap.service.DrivingService({
+        complete: function(result) {
+          if (result && result.result && result.result.routes && result.result.routes.length > 0) {
+            var route = result.result.routes[0];
+            var path = [];
+            if (route.steps) {
+              route.steps.forEach(function(step) {
+                if (step.polyline) path = path.concat(step.polyline);
+              });
+            }
+            if (path.length > 0) {
+              new TMap.MultiPolyline({
+                map: fsMap,
+                styles: {
+                  'style': new TMap.PolylineStyle({
+                    color: '#3777FF',
+                    width: 8,
+                    borderWidth: 2,
+                    borderColor: '#FFF',
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                  })
+                },
+                geometries: [{ id: 'line', styleId: 'style', paths: path }]
+              });
+            }
+            if (route.bounds) {
+              try {
+                fsMap.fitBounds(new TMap.LatLngBounds(
+                  new TMap.LatLng(route.bounds.southwest.lat, route.bounds.southwest.lng),
+                  new TMap.LatLng(route.bounds.northeast.lat, route.bounds.northeast.lng)
+                ), { padding: 80 });
+              } catch(e) {}
+            }
+          }
+        }
+      }).search({
+        from: new TMap.LatLng(order.fromLat, order.fromLng),
+        to: new TMap.LatLng(order.toLat, order.toLng)
+      });
+
+      window.__fsMap = fsMap;
+
+      // 禁止body滚动
+      document.body.style.overflow = 'hidden';
+    }, 50);
+  });
+
+  // 关闭按钮事件
+  setTimeout(function() {
+    var closeBtn = document.getElementById('map-fs-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function() {
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+        if (window.__fsMap) {
+          window.__fsMap.destroy();
+          window.__fsMap = null;
+        }
+        setTimeout(function() {
+          var el = document.getElementById('map-fullscreen-overlay');
+          if (el) el.remove();
+        }, 260);
+      });
+    }
+    // 点击空白区域也关闭（底部信息区除外）
+    overlay.addEventListener('click', function(e) {
+      if (e.target.id === 'map-fs-container') {
+        closeBtn.click();
+      }
+    });
+  }, 100);
+}
+
 // ============ 全局状态 ============
 const State = {
   currentUser: null,
@@ -803,6 +960,9 @@ async function renderOrderDetail(orderId) {
   const order = await DB.getOrderById(orderId);
   if (!order) return '<div class="page"><div class="page-content"><p>订单不存在</p></div></div>';
 
+  // 保存订单数据供全屏地图使用
+  window.__lastDetailOrder = order;
+
   const isUser = State.currentUser && State.currentUser.type === 'user';
   const isDriver = State.currentUser && State.currentUser.type === 'driver';
   const isStaff = State.currentUser && State.currentUser.type === 'staff';
@@ -866,7 +1026,10 @@ async function renderOrderDetail(orderId) {
   // 路线地图（如果有经纬度）
   var routeMapHtml = '';
   if (order.fromLat && order.fromLng && order.toLat && order.toLng) {
-    routeMapHtml = '<div id="detail-route-map" class="detail-route-map" style="margin-bottom:12px"></div>';
+    routeMapHtml = '<div id="detail-route-map-wrapper" style="position:relative;margin-bottom:12px">' +
+      '<div id="detail-route-map" class="detail-route-map"></div>' +
+      '<button class="map-expand-btn" data-action="expand-map" data-map-id="detail-route-map">⛶</button>' +
+      '</div>';
     // 距离信息
     var distText = '';
     if (order.distance && order.distance > 0) {
@@ -1728,6 +1891,12 @@ async function handleAction(action, dataset) {
       }
       break;
     }
+
+    // 展开地图全屏
+    case 'expand-map': {
+      openMapFullscreen();
+      break;
+    }
   }
 }
 
@@ -1746,9 +1915,13 @@ async function initPageExtras() {
     var order = await DB.getOrderById(State.pageParams.orderId);
     if (order && order.fromLat && order.fromLng && order.toLat && order.toLng) {
       setTimeout(function() {
-        initRouteDisplayMap('detail-route-map', order.fromLat, order.fromLng, order.toLat, order.toLng, {
-          showInfo: true
+        var m = initRouteDisplayMap('detail-route-map', order.fromLat, order.fromLng, order.toLat, order.toLng, {
+          showInfo: true,
+          onRouteReady: function(info) {
+            window.__detailRouteInfo = info;
+          }
         });
+        if (m) window.__detailRouteMap = m;
       }, 100);
     }
   }

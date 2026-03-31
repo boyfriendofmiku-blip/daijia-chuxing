@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>代驾出行 - 手机功能测试</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; background: #f5f5f5; }
+    .test-box { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h2 { color: #2C3E50; margin-bottom: 15px; font-size: 18px; }
+    .input-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; color: #666; font-size: 14px; }
+    input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+    button { width: 100%; padding: 14px; background: #3498db; color: white; border: none; border-radius: 8px; font-size: 16px; margin-top: 10px; }
+    #result { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #3498db; }
+    .status { padding: 10px; border-radius: 6px; margin-bottom: 10px; }
+    .success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+    .error { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+    .warning { background: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
+  </style>
+</head>
+<body>
+  <div class="test-box">
+    <h2>📱 手机浏览器功能测试</h2>
+    <div id="status"></div>
+    
+    <div class="input-group">
+      <label for="test-input">测试输入框（应该可以输入）</label>
+      <input type="text" id="test-input" placeholder="在这里输入文字...">
+    </div>
+    
+    <button onclick="testInput()">测试输入功能</button>
+    <button onclick="testFocus()">测试焦点功能</button>
+    <button onclick="testTouch()">测试触摸事件</button>
+    <button onclick="testReadonly()">检查readonly属性</button>
+  </div>
+  
+  <div class="test-box">
+    <h2>🗺️ 地图API测试</h2>
+    <div id="map-status"></div>
+    <button onclick="testMapAPI()">测试腾讯地图API</button>
+  </div>
+  
+  <div id="result"></div>
+
+  <script>
+    function log(msg, type = 'info') {
+      const result = document.getElementById('result');
+      const div = document.createElement('div');
+      div.className = 'status ' + type;
+      div.innerHTML = '<strong>' + new Date().toLocaleTimeString() + '</strong> ' + msg;
+      result.prepend(div);
+    }
+
+    function testInput() {
+      const input = document.getElementById('test-input');
+      input.focus();
+      log('输入框已获取焦点，请尝试输入文字', 'success');
+    }
+
+    function testFocus() {
+      const input = document.getElementById('test-input');
+      const hasFocus = document.activeElement === input;
+      log('输入框焦点状态: ' + (hasFocus ? '已获得焦点 ✓' : '未获得焦点 ✗'), 
+          hasFocus ? 'success' : 'error');
+    }
+
+    function testTouch() {
+      const input = document.getElementById('test-input');
+      input.addEventListener('touchstart', function(e) {
+        log('触摸开始事件触发 ✓', 'success');
+      }, { once: true });
+      log('已监听触摸事件，请触摸输入框', 'warning');
+    }
+
+    function testReadonly() {
+      const input = document.getElementById('test-input');
+      const readonly = input.hasAttribute('readonly');
+      log('readonly属性: ' + (readonly ? '存在 ✗' : '不存在 ✓'), 
+          readonly ? 'error' : 'success');
+    }
+
+    function testMapAPI() {
+      const mapStatus = document.getElementById('map-status');
+      if (typeof TMap !== 'undefined') {
+        mapStatus.innerHTML = '<div class="status success">腾讯地图API已加载 ✓</div>';
+        log('腾讯地图API可用', 'success');
+      } else {
+        mapStatus.innerHTML = '<div class="status error">腾讯地图API未加载 ✗</div>';
+        log('腾讯地图API未加载，请检查网络或API key', 'error');
+        
+        // 尝试加载地图API
+        const script = document.createElement('script');
+        script.src = 'https://map.qq.com/api/gljs?v=1.exp&key=OB4BZ-D4W3U-B7VVO-4PJWW-6TKDJ-WPB77';
+        script.onload = function() {
+          mapStatus.innerHTML = '<div class="status success">腾讯地图API动态加载成功 ✓</div>';
+          log('地图API动态加载成功', 'success');
+        };
+        script.onerror = function() {
+          mapStatus.innerHTML = '<div class="status error">腾讯地图API加载失败 ✗</div>';
+          log('地图API加载失败，可能是网络问题或API key无效', 'error');
+        };
+        document.head.appendChild(script);
+      }
+    }
+
+    // 页面加载时自动测试
+    window.onload = function() {
+      log('页面加载完成，开始自动测试...', 'info');
+      testReadonly();
+      testMapAPI();
+      
+      // 测试输入框的触摸和点击事件
+      const input = document.getElementById('test-input');
+      input.addEventListener('click', () => log('点击事件触发 ✓', 'success'));
+      input.addEventListener('touchstart', () => log('触摸事件触发 ✓', 'success'));
+    };
+  </script>
+</body>
+</html>

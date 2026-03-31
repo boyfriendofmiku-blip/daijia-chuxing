@@ -5,25 +5,46 @@
 
 // 全局错误处理
 window.onerror = function(msg, url, line, col, error) {
-  console.error('全局错误:', error);
+  console.error('全局错误:', msg, 'at', line + ':' + col, error);
   var app = document.getElementById('app');
-  if (app && app.innerHTML.indexOf('加载中') >= 0) {
-    app.innerHTML = '<div style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:20px">⚠️</div><h3>应用加载失败</h3><p style="color:#666;margin:12px 0">' + msg + '</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px">重新加载</button></div>';
+  if (app) {
+    app.innerHTML = '<div style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:20px">⚠️</div><h3>应用加载失败</h3><p style="color:#666;margin:12px 0">' + msg + '</p><p style="color:#999;font-size:12px;margin:8px 0">' + url + ':' + line + ':' + col + '</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px">重新加载</button></div>';
   }
   return false;
 };
 
 // 检查地图API加载状态
 setTimeout(function() {
-  if (typeof TMap === 'undefined') {
+  console.log('检查地图API状态:', typeof TMap, 'window.__tmapReady:', window.__tmapReady);
+  if (typeof TMap === 'undefined' && !window.__tmapReady) {
     console.warn('腾讯地图API加载超时，地图功能可能受限');
     // 如果地图API未加载，显示提示
     var app = document.getElementById('app');
     if (app && app.innerHTML.indexOf('加载中') >= 0) {
-      app.innerHTML = '<div style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:20px">⚠️</div><h3>地图加载中</h3><p style="color:#666;margin:12px 0">地图服务正在加载，请稍候...</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px">重新加载</button></div>';
+      app.innerHTML = '<div style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:20px">⚠️</div><h3>地图加载中</h3><p style="color:#666;margin:12px 0">地图服务正在加载，请稍候...</p><p style="color:#999;font-size:13px;margin:8px 0">如果长时间未加载，请检查网络连接</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px">重新加载</button></div>';
     }
   }
-}, 10000); // 10秒后检查
+}, 5000); // 5秒后检查
+
+// 应用启动日志
+console.log('代驾出行应用启动，当前时间:', new Date().toLocaleTimeString());
+
+// 确保地图API回调不会被覆盖
+if (!window._originalOnTMapReady) {
+  window._originalOnTMapReady = window.onTMapReady;
+}
+
+// 安全的回调包装
+window.onTMapReady = function() {
+  console.log('地图API回调执行');
+  window.__tmapReady = true;
+  window.dispatchEvent(new Event('tmap-ready'));
+  
+  // 调用原始回调（如果存在）
+  if (window._originalOnTMapReady) {
+    window._originalOnTMapReady();
+  }
+};
 
 window.addEventListener('unhandledrejection', function(e) {
   console.error('未处理的Promise错误:', e.reason);
@@ -1732,6 +1753,80 @@ function bindEvents() {
   if (drvFromEl) drvFromEl.removeAttribute('readonly');
   if (drvToEl) drvToEl.removeAttribute('readonly');
   
+  // 立即为搜索框和输入框添加基础事件，不等待地图API
+  var searchInputEl = document.getElementById('map-search-input');
+  var drvSearchInputEl = document.getElementById('drv-map-search-input');
+  
+  // 为地图搜索框添加立即生效的基础事件
+  if (searchInputEl) {
+    console.log('找到地图搜索框元素，添加基础事件');
+    searchInputEl.removeAttribute('readonly');
+    searchInputEl.addEventListener('click', function(e) {
+      e.stopPropagation();
+      searchInputEl.focus();
+      console.log('地图搜索框被点击');
+    });
+    searchInputEl.addEventListener('touchstart', function(e) {
+      e.stopPropagation();
+      searchInputEl.focus();
+      console.log('地图搜索框被触摸');
+    });
+  }
+  
+  if (drvSearchInputEl) {
+    drvSearchInputEl.removeAttribute('readonly');
+    drvSearchInputEl.addEventListener('click', function(e) {
+      e.stopPropagation();
+      drvSearchInputEl.focus();
+    });
+    drvSearchInputEl.addEventListener('touchstart', function(e) {
+      e.stopPropagation();
+      drvSearchInputEl.focus();
+    });
+  }
+  
+  // 为出发地和目的地输入框添加基础事件
+  var fromInputEl = document.getElementById('order-from');
+  var toInputEl = document.getElementById('order-to');
+  var drvFromEl = document.getElementById('drv-co-from');
+  var drvToEl = document.getElementById('drv-co-to');
+  
+  if (fromInputEl) {
+    console.log('找到出发地输入框，添加基础事件');
+    fromInputEl.removeAttribute('readonly');
+    fromInputEl.addEventListener('focus', function() {
+      console.log('出发地输入框获得焦点');
+    });
+    fromInputEl.addEventListener('input', function(e) {
+      console.log('出发地输入框输入:', e.target.value);
+    });
+  }
+  
+  if (toInputEl) {
+    console.log('找到目的地输入框，添加基础事件');
+    toInputEl.removeAttribute('readonly');
+    toInputEl.addEventListener('focus', function() {
+      console.log('目的地输入框获得焦点');
+    });
+    toInputEl.addEventListener('input', function(e) {
+      console.log('目的地输入框输入:', e.target.value);
+    });
+  }
+  
+  if (drvFromEl) {
+    drvFromEl.removeAttribute('readonly');
+    drvFromEl.addEventListener('focus', function() {
+      console.log('司机端出发地输入框获得焦点');
+    });
+  }
+  
+  if (drvToEl) {
+    drvToEl.removeAttribute('readonly');
+    drvToEl.addEventListener('focus', function() {
+      console.log('司机端目的地输入框获得焦点');
+    });
+  }
+  
   function doInitMaps() {
     var orderMapEl = document.getElementById('order-map');
     if (orderMapEl && typeof TMap !== 'undefined') {
@@ -1769,42 +1864,77 @@ function bindEvents() {
 
   // ===== 估算费用 =====
   var estimateBtn = document.getElementById('estimate-btn');
+  console.log('费用估算按钮元素:', estimateBtn);
   if (estimateBtn) {
     estimateBtn.addEventListener('click', function() {
-      var from = document.getElementById('order-from').value.trim();
-      var to = document.getElementById('order-to').value.trim();
-      if (!from || !to) { showToast('请输入出发地和目的地', 'error'); return; }
+      console.log('费用估算按钮被点击');
+      var from = document.getElementById('order-from');
+      var to = document.getElementById('order-to');
+      
+      if (!from || !to) {
+        console.error('未找到输入框元素');
+        showToast('页面元素加载异常', 'error');
+        return;
+      }
+      
+      var fromVal = from.value.trim();
+      var toVal = to.value.trim();
+      console.log('出发地:', fromVal, '目的地:', toVal);
+      
+      if (!fromVal || !toVal) { 
+        showToast('请输入出发地和目的地', 'error'); 
+        return; 
+      }
       
       // 检查是否有经纬度
-      var fromLat = document.getElementById('order-from-lat').value;
-      var fromLng = document.getElementById('order-from-lng').value;
-      var toLat = document.getElementById('order-to-lat').value;
-      var toLng = document.getElementById('order-to-lng').value;
+      var fromLat = document.getElementById('order-from-lat');
+      var fromLng = document.getElementById('order-from-lng');
+      var toLat = document.getElementById('order-to-lat');
+      var toLng = document.getElementById('order-to-lng');
+      
+      var fromLatVal = fromLat ? fromLat.value : '';
+      var fromLngVal = fromLng ? fromLng.value : '';
+      var toLatVal = toLat ? toLat.value : '';
+      var toLngVal = toLng ? toLng.value : '';
       
       // 如果没有经纬度，使用基于地址长度的估算（不再阻止）
-      var hasCoords = fromLat && fromLng && toLat && toLng;
+      var hasCoords = fromLatVal && fromLngVal && toLatVal && toLngVal;
+      console.log('是否有经纬度:', hasCoords, fromLatVal, fromLngVal, toLatVal, toLngVal);
+      
       if (!hasCoords) {
         showToast('未检测到地图位置，使用地址估算费用', 'warning');
       }
       
-      var price = estimatePrice(from, to);
+      var price = estimatePrice(fromVal, toVal);
+      console.log('估算价格:', price);
+      
       var box = document.getElementById('price-estimate-box');
       var display = document.getElementById('price-display');
+      console.log('费用显示元素:', box, display);
+      
       if (box && display) {
         var nightNote = isNightTime() ? '<div style="font-size:11px;color:#E67E22;margin-top:4px">🌙 含夜间服务费（+30%）</div>' : '';
         var coordsNote = !hasCoords ? '<div style="font-size:11px;color:#E67E22;margin-top:4px">⚠️ 地图位置缺失，费用可能不准确</div>' : '';
         display.innerHTML = '¥' + price + nightNote + coordsNote;
         box.style.display = 'flex';
+        console.log('费用显示已更新');
       }
+      
       var submitBtn = document.getElementById('submit-order-btn');
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.dataset.from = from;
-        submitBtn.dataset.to = to;
+        submitBtn.dataset.from = fromVal;
+        submitBtn.dataset.to = toVal;
         submitBtn.dataset.price = price;
+        console.log('下单按钮已启用');
       }
       showToast('预估费用：¥' + price, 'success');
     });
+    
+    // 立即测试按钮是否可点击
+    console.log('费用估算按钮事件已绑定');
+  } else {
+    console.error('未找到费用估算按钮元素');
   }
 
   // ===== 下单按钮（异步） =====

@@ -13,6 +13,18 @@ window.onerror = function(msg, url, line, col, error) {
   return false;
 };
 
+// 检查地图API加载状态
+setTimeout(function() {
+  if (typeof TMap === 'undefined') {
+    console.warn('腾讯地图API加载超时，地图功能可能受限');
+    // 如果地图API未加载，显示提示
+    var app = document.getElementById('app');
+    if (app && app.innerHTML.indexOf('加载中') >= 0) {
+      app.innerHTML = '<div style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:20px">⚠️</div><h3>地图加载中</h3><p style="color:#666;margin:12px 0">地图服务正在加载，请稍候...</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px">重新加载</button></div>';
+    }
+  }
+}, 10000); // 10秒后检查
+
 window.addEventListener('unhandledrejection', function(e) {
   console.error('未处理的Promise错误:', e.reason);
 });
@@ -261,19 +273,25 @@ function initOrderMap(opts) {
 
   if (searchInput) {
     // 在手机浏览器上确保搜索框可以点击和输入
-    if (searchInput) {
-      // 移除readonly属性（如果存在）
-      searchInput.removeAttribute('readonly');
-      // 防止触摸事件穿透到地图
-      searchInput.addEventListener('touchstart', function(e) { e.stopPropagation(); });
-      searchInput.addEventListener('touchmove', function(e) { e.stopPropagation(); });
-      // 修复手机浏览器上输入框聚焦问题
-      searchInput.addEventListener('focus', function() {
-        setTimeout(function() {
-          if (searchInput) searchInput.focus();
-        }, 100);
-      });
-    }
+    // 移除readonly属性（如果存在）
+    searchInput.removeAttribute('readonly');
+    // 防止触摸事件穿透到地图
+    searchInput.addEventListener('touchstart', function(e) { 
+      e.stopPropagation();
+      // 确保搜索框获得焦点
+      searchInput.focus();
+    });
+    searchInput.addEventListener('touchmove', function(e) { e.stopPropagation(); });
+    // 修复手机浏览器上输入框聚焦问题
+    searchInput.addEventListener('focus', function() {
+      setTimeout(function() {
+        if (searchInput) searchInput.focus();
+      }, 100);
+    });
+    searchInput.addEventListener('click', function(e) {
+      e.stopPropagation();
+      searchInput.focus();
+    });
     // 阻止搜索结果面板的触摸穿透
     if (searchResults) {
       searchResults.addEventListener('touchstart', function(e) { e.stopPropagation(); });
@@ -344,15 +362,61 @@ function initOrderMap(opts) {
     fromInput.addEventListener('focus', function() {
       selectMode = 'from';
       updateInfo('🟢 点击地图或搜索选择出发地');
+      // 确保地图可见且聚焦
+      if (map) {
+        map.setZoom(15);
+        // 如果有当前位置的标记，调整视图
+        if (fromMarker) {
+          var pos = fromMarker.getGeometries()[0].position;
+          map.setCenter(pos);
+        }
+      }
     });
     fromInput.removeAttribute('readonly');
+    // 添加输入事件，尝试自动搜索
+    fromInput.addEventListener('input', function(e) {
+      var keyword = fromInput.value.trim();
+      if (keyword.length > 2) {
+        // 自动搜索并更新地图位置
+        var poiservice = new TMap.service.PoiSearch();
+        poiservice.search({ keyword: keyword, pageSize: 3 }).then(function(res) {
+          if (res.data && res.data.length > 0) {
+            var poi = res.data[0];
+            updateMarker('from', poi.location.lat, poi.location.lng, poi.title);
+          }
+        }).catch(function() {});
+      }
+    });
   }
   if (toInput) {
     toInput.addEventListener('focus', function() {
       selectMode = 'to';
       updateInfo('🔴 点击地图或搜索选择目的地');
+      // 确保地图可见且聚焦
+      if (map) {
+        map.setZoom(15);
+        // 如果有当前位置的标记，调整视图
+        if (toMarker) {
+          var pos = toMarker.getGeometries()[0].position;
+          map.setCenter(pos);
+        }
+      }
     });
     toInput.removeAttribute('readonly');
+    // 添加输入事件，尝试自动搜索
+    toInput.addEventListener('input', function(e) {
+      var keyword = toInput.value.trim();
+      if (keyword.length > 2) {
+        // 自动搜索并更新地图位置
+        var poiservice = new TMap.service.PoiSearch();
+        poiservice.search({ keyword: keyword, pageSize: 3 }).then(function(res) {
+          if (res.data && res.data.length > 0) {
+            var poi = res.data[0];
+            updateMarker('to', poi.location.lat, poi.location.lng, poi.title);
+          }
+        }).catch(function() {});
+      }
+    });
   }
 
   if (navigator.geolocation) {
@@ -1717,9 +1781,10 @@ function bindEvents() {
       var toLat = document.getElementById('order-to-lat').value;
       var toLng = document.getElementById('order-to-lng').value;
       
-      if (!fromLat || !fromLng || !toLat || !toLng) {
-        showToast('请先在地图上设置出发地和目的地的位置', 'warning');
-        return;
+      // 如果没有经纬度，使用基于地址长度的估算（不再阻止）
+      var hasCoords = fromLat && fromLng && toLat && toLng;
+      if (!hasCoords) {
+        showToast('未检测到地图位置，使用地址估算费用', 'warning');
       }
       
       var price = estimatePrice(from, to);
@@ -1727,7 +1792,8 @@ function bindEvents() {
       var display = document.getElementById('price-display');
       if (box && display) {
         var nightNote = isNightTime() ? '<div style="font-size:11px;color:#E67E22;margin-top:4px">🌙 含夜间服务费（+30%）</div>' : '';
-        display.innerHTML = '¥' + price + nightNote;
+        var coordsNote = !hasCoords ? '<div style="font-size:11px;color:#E67E22;margin-top:4px">⚠️ 地图位置缺失，费用可能不准确</div>' : '';
+        display.innerHTML = '¥' + price + nightNote + coordsNote;
         box.style.display = 'flex';
       }
       var submitBtn = document.getElementById('submit-order-btn');

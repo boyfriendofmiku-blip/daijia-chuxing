@@ -1016,9 +1016,9 @@ function renderCreateOrder() {
         '<div id="route-info" class="route-info-panel" style="display:none"></div>' +
       '</div>' +
       '<div class="card">' +
-        '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-from" placeholder="请输入出发地址" readonly /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
+        '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-from" placeholder="请输入出发地址" /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
         '<div style="text-align:center;color:var(--text-muted);font-size:18px;padding:2px 0">⇅</div>' +
-        '<div class="form-group"><label>🔴 目的地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-to" placeholder="请输入目的地址" readonly /><input type="hidden" id="order-to-lat" /><input type="hidden" id="order-to-lng" /></div>' +
+        '<div class="form-group"><label>🔴 目的地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-to" placeholder="请输入目的地址" /><input type="hidden" id="order-to-lat" /><input type="hidden" id="order-to-lng" /></div>' +
         '<div class="form-group"><label>📝 备注（可选）</label><input class="form-control" id="order-note" placeholder="例：喝了点酒，车停在地下车库B1" /></div>' +
       '</div>' +
       '<div id="price-estimate-box" style="display:none" class="price-estimate"><div><div class="price-label">预估费用</div><div style="font-size:12px;opacity:0.8;margin-top:2px">实际费用以完成订单为准</div></div><div class="price-value" id="price-display">¥0</div></div>' +
@@ -1351,9 +1351,9 @@ function renderDriverCreateOrder() {
       '<div class="card">' +
         '<div class="form-group"><label>👤 客户姓名</label><input class="form-control" id="drv-co-name" placeholder="请输入客户姓名" /></div>' +
         '<div class="form-group"><label>📞 客户电话</label><input class="form-control" id="drv-co-phone" placeholder="请输入客户手机号" /></div>' +
-        '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（地图选点或搜索）</span></label><input class="form-control" id="drv-co-from" placeholder="请输入出发地址" readonly /><input type="hidden" id="drv-co-from-lat" /><input type="hidden" id="drv-co-from-lng" /></div>' +
+        '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（地图选点或搜索）</span></label><input class="form-control" id="drv-co-from" placeholder="请输入出发地址" /><input type="hidden" id="drv-co-from-lat" /><input type="hidden" id="drv-co-from-lng" /></div>' +
         '<div style="text-align:center;color:var(--text-muted);font-size:18px;padding:2px 0">⇅</div>' +
-        '<div class="form-group"><label>🔴 目的地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（地图选点或搜索）</span></label><input class="form-control" id="drv-co-to" placeholder="请输入目的地址" readonly /><input type="hidden" id="drv-co-to-lat" /><input type="hidden" id="drv-co-to-lng" /></div>' +
+        '<div class="form-group"><label>🔴 目的地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（地图选点或搜索）</span></label><input class="form-control" id="drv-co-to" placeholder="请输入目的地址" /><input type="hidden" id="drv-co-to-lat" /><input type="hidden" id="drv-co-to-lng" /></div>' +
         '<div class="form-group"><label>💰 费用（元）</label><input class="form-control" id="drv-co-price" type="number" placeholder="请输入代驾费用" /></div>' +
         '<div class="form-group"><label>📝 备注（可选）</label><input class="form-control" id="drv-co-note" placeholder="例：车停在地下车库B1" /></div>' +
       '</div>' +

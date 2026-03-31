@@ -246,6 +246,14 @@ function initOrderMap(opts) {
   }
 
   if (searchInput) {
+    // 防止手机上触摸搜索框时穿透到地图
+    searchInput.addEventListener('touchstart', function(e) { e.stopPropagation(); });
+    searchInput.addEventListener('touchmove', function(e) { e.stopPropagation(); });
+    // 阻止搜索结果面板的触摸穿透
+    if (searchResults) {
+      searchResults.addEventListener('touchstart', function(e) { e.stopPropagation(); });
+      searchResults.addEventListener('touchmove', function(e) { e.stopPropagation(); });
+    }
     searchInput.addEventListener('input', function() {
       var keyword = searchInput.value.trim();
       if (searchTimer) clearTimeout(searchTimer);
@@ -290,6 +298,8 @@ function initOrderMap(opts) {
                   updateInfo('✅ 出发地和目的地已设置');
                 }
               });
+              item.addEventListener('touchstart', function(e) { e.stopPropagation(); });
+              item.addEventListener('touchmove', function(e) { e.stopPropagation(); });
             });
           }
         }).catch(function() {

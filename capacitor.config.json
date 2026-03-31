@@ -1,7 +1,7 @@
 {
   "appId": "com.daijia.chuxing",
   "appName": "代驾出行",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   },

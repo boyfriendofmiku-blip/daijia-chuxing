@@ -1,7 +1,7 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
   push:
     branches: [ main ]
 
@@ -26,6 +26,17 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Prepare web assets
+        run: |
+          mkdir -p www
+          cp index.html www/
+          cp app-fixed.js www/
+          cp staff.js www/
+          cp style.css www/
+          cp sw.js www/
+          cp manifest.json www/
+          cp -r icons www/
+
       - name: Install dependencies
         run: |
           npm install
@@ -34,8 +45,8 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
-      - name: Copy web assets
-        run: npx cap copy android
+      - name: Sync web assets to Android
+        run: npx cap sync android
 
       - name: Build APK (debug)
         working-directory: android

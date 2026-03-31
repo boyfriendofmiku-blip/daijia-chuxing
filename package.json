@@ -1,0 +1,20 @@
+{
+  "name": "daijia-chuxing",
+  "version": "1.0.0",
+  "description": "代驾出行 - PWA代驾服务平台",
+  "main": "app-fixed.js",
+  "scripts": {
+    "build": "echo 'Static site, no build needed'"
+  },
+  "keywords": [
+    "代驾",
+    "出行",
+    "pwa"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0"
+  }
+}

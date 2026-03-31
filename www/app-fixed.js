@@ -260,9 +260,20 @@ function initOrderMap(opts) {
   }
 
   if (searchInput) {
-    // 防止手机上触摸搜索框时穿透到地图
-    searchInput.addEventListener('touchstart', function(e) { e.stopPropagation(); });
-    searchInput.addEventListener('touchmove', function(e) { e.stopPropagation(); });
+    // 在手机浏览器上确保搜索框可以点击和输入
+    if (searchInput) {
+      // 移除readonly属性（如果存在）
+      searchInput.removeAttribute('readonly');
+      // 防止触摸事件穿透到地图
+      searchInput.addEventListener('touchstart', function(e) { e.stopPropagation(); });
+      searchInput.addEventListener('touchmove', function(e) { e.stopPropagation(); });
+      // 修复手机浏览器上输入框聚焦问题
+      searchInput.addEventListener('focus', function() {
+        setTimeout(function() {
+          if (searchInput) searchInput.focus();
+        }, 100);
+      });
+    }
     // 阻止搜索结果面板的触摸穿透
     if (searchResults) {
       searchResults.addEventListener('touchstart', function(e) { e.stopPropagation(); });
@@ -604,26 +615,56 @@ function openMapFullscreen() {
   setTimeout(function() {
     var closeBtn = document.getElementById('map-fs-close');
     if (closeBtn) {
+      // 添加触摸反馈
+      closeBtn.addEventListener('touchstart', function(e) {
+        e.stopPropagation();
+        this.style.transform = 'scale(0.95)';
+      });
+      closeBtn.addEventListener('touchend', function(e) {
+        e.stopPropagation();
+        this.style.transform = '';
+      });
+      
       closeBtn.addEventListener('click', function() {
-        overlay.classList.remove('active');
-        document.body.style.overflow = '';
-        if (window.__fsMap) {
-          window.__fsMap.destroy();
-          window.__fsMap = null;
-        }
-        setTimeout(function() {
-          var el = document.getElementById('map-fullscreen-overlay');
-          if (el) el.remove();
-        }, 260);
+        closeMapFullscreen();
       });
     }
+    
     // 点击空白区域也关闭（底部信息区除外）
     overlay.addEventListener('click', function(e) {
-      if (e.target.id === 'map-fs-container') {
-        closeBtn.click();
+      if (e.target.id === 'map-fs-container' || e.target === overlay) {
+        closeMapFullscreen();
+      }
+    });
+    
+    // 手机上的触摸关闭（滑动关闭）
+    var startY = 0;
+    overlay.addEventListener('touchstart', function(e) {
+      startY = e.touches[0].clientY;
+    });
+    overlay.addEventListener('touchmove', function(e) {
+      var currentY = e.touches[0].clientY;
+      var diff = currentY - startY;
+      // 向下滑动超过100px关闭
+      if (diff > 100) {
+        closeMapFullscreen();
       }
     });
   }, 100);
+  
+  // 关闭全屏地图的函数
+  function closeMapFullscreen() {
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+    if (window.__fsMap) {
+      window.__fsMap.destroy();
+      window.__fsMap = null;
+    }
+    setTimeout(function() {
+      var el = document.getElementById('map-fullscreen-overlay');
+      if (el) el.remove();
+    }, 260);
+  }
 }
 
 // ============ 全局状态 ============
@@ -670,12 +711,32 @@ function showToast(msg, type) {
 
 function estimatePrice(from, to) {
   const base = 30;
-  const dist = (from.length + to.length) % 20 + 5;
-  let price = base + dist * 2 + Math.random() * 20;
+  let distance = 0;
+  
+  // 尝试从地图获取实际距离
+  if (window.__orderMap && window.__orderMap._getRouteInfo) {
+    const routeInfo = window.__orderMap._getRouteInfo();
+    distance = routeInfo.distance || 0;
+  }
+  
+  // 如果没有地图距离，使用默认估算
+  if (distance <= 0) {
+    distance = (from.length + to.length) % 20 + 5;
+  }
+  
+  // 转换为公里
+  const km = distance / 1000;
+  let price = base + km * 5; // 5元/公里
+  
+  // 夜间服务费
   const hour = new Date().getHours();
   const isNight = hour >= 22 || hour < 6;
   if (isNight) price *= 1.3;
-  return price.toFixed(0);
+  
+  // 最低价格
+  price = Math.max(price, 40);
+  
+  return Math.round(price);
 }
 function isNightTime() {
   const hour = new Date().getHours();
@@ -1649,6 +1710,18 @@ function bindEvents() {
       var from = document.getElementById('order-from').value.trim();
       var to = document.getElementById('order-to').value.trim();
       if (!from || !to) { showToast('请输入出发地和目的地', 'error'); return; }
+      
+      // 检查是否有经纬度
+      var fromLat = document.getElementById('order-from-lat').value;
+      var fromLng = document.getElementById('order-from-lng').value;
+      var toLat = document.getElementById('order-to-lat').value;
+      var toLng = document.getElementById('order-to-lng').value;
+      
+      if (!fromLat || !fromLng || !toLat || !toLng) {
+        showToast('请先在地图上设置出发地和目的地的位置', 'warning');
+        return;
+      }
+      
       var price = estimatePrice(from, to);
       var box = document.getElementById('price-estimate-box');
       var display = document.getElementById('price-display');

@@ -45,7 +45,7 @@
     // 注册 Service Worker（失败不影响应用运行）
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err => {
+        navigator.serviceWorker.register('sw.js').catch(err => {
           console.log('SW 注册失败（不影响使用）:', err.message);
         });
       });

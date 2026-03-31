@@ -9,6 +9,20 @@ const SUPABASE_KEY = 'sb_publishable_p1hgv-jDE3SBZ5_MoaU_5Q_UYEsMl8h';
 let _sb = null;
 function sb() {
   if (!_sb) {
+    // 安全检查：确保Supabase SDK已加载
+    if (!window.supabase) {
+      console.error('Supabase SDK未加载！请检查CDN脚本。');
+      // 返回一个模拟的supabase对象，避免应用崩溃
+      return {
+        from: () => ({ 
+          select: () => ({ 
+            eq: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) 
+          }),
+          insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: { code: 'NO_SUPABASE', message: 'Supabase SDK未加载' } }) }) }),
+          update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }),
+          channel: () => ({ on: () => ({ subscribe: () => ({}) }) })
+        };
+    }
     _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   }
   return _sb;

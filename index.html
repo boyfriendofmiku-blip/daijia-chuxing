@@ -25,6 +25,17 @@
   <!-- 腾讯地图（callback确保API就绪后才初始化） -->
   <script src="https://map.qq.com/api/gljs?v=1.exp&key=OB4BZ-D4W3U-B7VVO-4PJWW-6TKDJ-WPB77&callback=onTMapReady"></script>
   <script>
+    // 检查Supabase SDK是否成功加载
+    setTimeout(function() {
+      if (!window.supabase) {
+        console.error('Supabase SDK加载失败！');
+        var app = document.getElementById('app');
+        if (app) {
+          app.innerHTML = '<div style="padding:40px;text-align:center;"><div style="font-size:48px;margin-bottom:20px;">🔴</div><h3>网络连接问题</h3><p style="color:#666;margin:12px 0;">Supabase数据服务加载失败</p><p style="color:#999;font-size:13px;margin:8px 0;">请检查网络连接后刷新页面</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px;margin-top:12px;">刷新页面</button></div>';
+        }
+      }
+    }, 2000);
+    
     // 地图API就绪标记和事件
     window.__tmapReady = false;
     window.onTMapReady = function() {

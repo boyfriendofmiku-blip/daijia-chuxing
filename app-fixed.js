@@ -17,6 +17,13 @@ function initOrderMap(opts) {
   var toolInfo = document.getElementById(opts.toolInfoId);
   var routeInfoEl = document.getElementById(opts.routeInfoId);
   if (!mapDiv) return;
+  
+  // 检查地图API是否就绪
+  if (typeof TMap === 'undefined') {
+    console.warn('腾讯地图API未加载，地图功能暂不可用');
+    if (toolInfo) toolInfo.textContent = '地图加载中...';
+    return;
+  }
 
   var selectMode = 'from';
   var map = null;
@@ -340,6 +347,14 @@ function initOrderMap(opts) {
 function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) {
   var mapDiv = document.getElementById(mapDivId);
   if (!mapDiv) return null;
+  
+  // 检查地图API是否就绪
+  if (typeof TMap === 'undefined') {
+    console.warn('腾讯地图API未加载，无法显示路线地图 ' + mapDivId);
+    mapDiv.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px">地图加载中...</div>';
+    return null;
+  }
+  
   options = options || {};
 
   var map = new TMap.Map(mapDiv, {
@@ -551,8 +566,29 @@ async function render() {
     app.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:12px">⚠️</div><div>页面加载失败</div><div style="margin-top:8px;font-size:13px">' + err.message + '</div></div>';
   }
   bindEvents();
+  
   // 页面后置初始化（地图等需要DOM渲染后初始化的组件）
-  initPageExtras();
+  // 如果地图API还未就绪，等待就绪后再初始化
+  if (typeof TMap !== 'undefined') {
+    initPageExtras();
+  } else if (window.__tmapReady) {
+    initPageExtras();
+  } else {
+    // 监听地图API就绪事件
+    var initExtrasOnce = function() {
+      initPageExtras();
+      window.removeEventListener('tmap-ready', initExtrasOnce);
+    };
+    window.addEventListener('tmap-ready', initExtrasOnce);
+    // 超时保护：20秒后强制初始化
+    setTimeout(function() {
+      if (!window.__initPageExtrasExecuted) {
+        console.warn('地图API加载超时，强制初始化页面');
+        initPageExtras();
+        window.__initPageExtrasExecuted = true;
+      }
+    }, 20000);
+  }
 }
 
 // ============================================================
@@ -1372,26 +1408,50 @@ function bindEvents() {
   // ===== 地图初始化 =====
   window.__orderMap = null;
   window.__drvMap = null;
-  var orderMapEl = document.getElementById('order-map');
-  if (orderMapEl && typeof TMap !== 'undefined') {
-    window.__orderMap = initOrderMap({
-      mapDivId: 'order-map',
-      fromInputId: 'order-from', fromLatId: 'order-from-lat', fromLngId: 'order-from-lng',
-      toInputId: 'order-to', toLatId: 'order-to-lat', toLngId: 'order-to-lng',
-      searchInputId: 'map-search-input', searchResultsId: 'map-search-results',
-      locateBtnId: 'map-locate-btn', toolInfoId: 'map-tool-info',
-      routeInfoId: 'route-info'
-    });
+  
+  // 无论地图是否加载，先解除输入框的readonly限制
+  // 确保用户在地图加载失败时也能手动输入地址
+  var fromInputEl = document.getElementById('order-from');
+  var toInputEl = document.getElementById('order-to');
+  var drvFromEl = document.getElementById('drv-co-from');
+  var drvToEl = document.getElementById('drv-co-to');
+  if (fromInputEl) fromInputEl.removeAttribute('readonly');
+  if (toInputEl) toInputEl.removeAttribute('readonly');
+  if (drvFromEl) drvFromEl.removeAttribute('readonly');
+  if (drvToEl) drvToEl.removeAttribute('readonly');
+  
+  function doInitMaps() {
+    var orderMapEl = document.getElementById('order-map');
+    if (orderMapEl && typeof TMap !== 'undefined') {
+      window.__orderMap = initOrderMap({
+        mapDivId: 'order-map',
+        fromInputId: 'order-from', fromLatId: 'order-from-lat', fromLngId: 'order-from-lng',
+        toInputId: 'order-to', toLatId: 'order-to-lat', toLngId: 'order-to-lng',
+        searchInputId: 'map-search-input', searchResultsId: 'map-search-results',
+        locateBtnId: 'map-locate-btn', toolInfoId: 'map-tool-info',
+        routeInfoId: 'route-info'
+      });
+    }
+    var drvMapEl = document.getElementById('drv-order-map');
+    if (drvMapEl && typeof TMap !== 'undefined') {
+      window.__drvMap = initOrderMap({
+        mapDivId: 'drv-order-map',
+        fromInputId: 'drv-co-from', fromLatId: 'drv-co-from-lat', fromLngId: 'drv-co-from-lng',
+        toInputId: 'drv-co-to', toLatId: 'drv-co-to-lat', toLngId: 'drv-co-to-lng',
+        searchInputId: 'drv-map-search-input', searchResultsId: 'drv-map-search-results',
+        locateBtnId: 'drv-map-locate-btn', toolInfoId: 'drv-map-tool-info',
+        routeInfoId: 'drv-route-info'
+      });
+    }
   }
-  var drvMapEl = document.getElementById('drv-order-map');
-  if (drvMapEl && typeof TMap !== 'undefined') {
-    window.__drvMap = initOrderMap({
-      mapDivId: 'drv-order-map',
-      fromInputId: 'drv-co-from', fromLatId: 'drv-co-from-lat', fromLngId: 'drv-co-from-lng',
-      toInputId: 'drv-co-to', toLatId: 'drv-co-to-lat', toLngId: 'drv-co-to-lng',
-      searchInputId: 'drv-map-search-input', searchResultsId: 'drv-map-search-results',
-      locateBtnId: 'drv-map-locate-btn', toolInfoId: 'drv-map-tool-info',
-      routeInfoId: 'drv-route-info'
+  
+  // 如果TMap已就绪，直接初始化；否则等待
+  if (typeof TMap !== 'undefined') {
+    doInitMaps();
+  } else {
+    window.addEventListener('tmap-ready', function onReady() {
+      doInitMaps();
+      window.removeEventListener('tmap-ready', onReady);
     });
   }
 
@@ -1665,6 +1725,12 @@ async function handleAction(action, dataset) {
 //  页面后置初始化 - 地图、动态组件等
 // ============================================================
 async function initPageExtras() {
+  // 检查地图API是否就绪
+  if (typeof TMap === 'undefined') {
+    console.warn('地图API未就绪，跳过地图初始化');
+    return;
+  }
+  
   // 初始化订单详情页的路线地图
   if (State.currentPage === 'order-detail' && State.pageParams.orderId) {
     var order = await DB.getOrderById(State.pageParams.orderId);

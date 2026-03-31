@@ -22,8 +22,17 @@
 
   <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- 腾讯地图 -->
-  <script src="https://map.qq.com/api/gljs?v=1.exp&key=OB4BZ-D4W3U-B7VVO-4PJWW-6TKDJ-WPB77"></script>
+  <!-- 腾讯地图（callback确保API就绪后才初始化） -->
+  <script src="https://map.qq.com/api/gljs?v=1.exp&key=OB4BZ-D4W3U-B7VVO-4PJWW-6TKDJ-WPB77&callback=onTMapReady"></script>
+  <script>
+    // 地图API就绪标记和事件
+    window.__tmapReady = false;
+    window.onTMapReady = function() {
+      window.__tmapReady = true;
+      console.log('腾讯地图API已就绪');
+      window.dispatchEvent(new Event('tmap-ready'));
+    };
+  </script>
 </head>
 <body>
   <div id="app">

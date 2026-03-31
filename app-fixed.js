@@ -551,6 +551,8 @@ async function render() {
     app.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)"><div style="font-size:32px;margin-bottom:12px">⚠️</div><div>页面加载失败</div><div style="margin-top:8px;font-size:13px">' + err.message + '</div></div>';
   }
   bindEvents();
+  // 页面后置初始化（地图等需要DOM渲染后初始化的组件）
+  initPageExtras();
 }
 
 // ============================================================
@@ -815,6 +817,20 @@ async function renderOrderDetail(orderId) {
     }
   }
 
+  // 路线地图（如果有经纬度）
+  var routeMapHtml = '';
+  if (order.fromLat && order.fromLng && order.toLat && order.toLng) {
+    routeMapHtml = '<div id="detail-route-map" class="detail-route-map" style="margin-bottom:12px"></div>';
+    // 距离信息
+    var distText = '';
+    if (order.distance && order.distance > 0) {
+      distText = order.distance >= 1000 ? (order.distance / 1000).toFixed(1) + ' km' : order.distance + ' m';
+    }
+    if (distText) {
+      routeMapHtml += '<div style="font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:8px">📏 预估距离：' + distText + '</div>';
+    }
+  }
+
   // 操作按钮
   let actionButtons = '';
   if (isUser && order.status === 'pending') {
@@ -834,6 +850,7 @@ async function renderOrderDetail(orderId) {
     '<div class="page-content">' +
       '<div class="card" style="margin-bottom:16px"><div class="card-header">📍 行程信息</div>' +
         stepsHtml +
+        routeMapHtml +
         '<div class="order-route" style="margin-bottom:12px">' +
           '<div class="route-item"><span class="route-dot start"></span><div><div style="font-size:12px;color:var(--text-muted)">出发地</div><div>' + order.from + '</div></div></div>' +
           '<div class="route-item"><span class="route-connector"></span></div>' +
@@ -994,11 +1011,24 @@ async function renderOrderHall() {
       const user = o.userId ? users.find(function(u) { return u.id === o.userId; }) : null;
       const pName = user ? user.name : '乘客';
       const pPhone = user ? user.phone : '';
+      // 迷你地图：仅当订单有经纬度时显示
+      const hasCoords = o.from_lat && o.from_lng && o.to_lat && o.to_lng;
+      const miniMapHtml = hasCoords
+        ? '<div class="hall-mini-map" id="hall-map-' + o.id + '" data-from-lat="' + o.from_lat + '" data-from-lng="' + o.from_lng + '" data-to-lat="' + o.to_lat + '" data-to-lng="' + o.to_lng + '"></div>'
+        : '';
+      // 距离信息
+      var distText = '';
+      if (o.distance && o.distance > 0) {
+        distText = o.distance >= 1000 ? (o.distance / 1000).toFixed(1) + ' km' : o.distance + ' m';
+      }
+      const distHtml = distText ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📏 ' + distText + '</div>' : '';
       ordersHtml += '<div class="hall-order-card">' +
         '<div class="hall-header"><div><div class="order-user">👤 ' + pName + '</div>' +
           (pPhone ? '<div class="order-meta">📞 ' + pPhone + '</div>' : '') +
           '<div class="order-meta">' + o.createdAt + '</div></div>' +
           '<span class="order-price" style="font-size:20px">' + formatPrice(o.price) + '</span></div>' +
+        miniMapHtml +
+        distHtml +
         '<div class="order-route" style="margin-bottom:12px">' +
           '<div class="route-item"><span class="route-dot start"></span><span>' + o.from + '</span></div>' +
           '<div class="route-item" style="padding-left:2px"><span class="route-connector"></span></div>' +
@@ -1340,9 +1370,11 @@ function bindEvents() {
   }
 
   // ===== 地图初始化 =====
+  window.__orderMap = null;
+  window.__drvMap = null;
   var orderMapEl = document.getElementById('order-map');
   if (orderMapEl && typeof TMap !== 'undefined') {
-    initOrderMap({
+    window.__orderMap = initOrderMap({
       mapDivId: 'order-map',
       fromInputId: 'order-from', fromLatId: 'order-from-lat', fromLngId: 'order-from-lng',
       toInputId: 'order-to', toLatId: 'order-to-lat', toLngId: 'order-to-lng',
@@ -1353,7 +1385,7 @@ function bindEvents() {
   }
   var drvMapEl = document.getElementById('drv-order-map');
   if (drvMapEl && typeof TMap !== 'undefined') {
-    initOrderMap({
+    window.__drvMap = initOrderMap({
       mapDivId: 'drv-order-map',
       fromInputId: 'drv-co-from', fromLatId: 'drv-co-from-lat', fromLngId: 'drv-co-from-lng',
       toInputId: 'drv-co-to', toLatId: 'drv-co-to-lat', toLngId: 'drv-co-to-lng',
@@ -1420,10 +1452,23 @@ function bindEvents() {
       var note = document.getElementById('order-note') ? document.getElementById('order-note').value.trim() : '';
       if (!from || !to) { showToast('请先估算费用', 'error'); return; }
 
+      // 获取经纬度和距离
+      var fromLat = document.getElementById('order-from-lat') ? document.getElementById('order-from-lat').value : '';
+      var fromLng = document.getElementById('order-from-lng') ? document.getElementById('order-from-lng').value : '';
+      var toLat = document.getElementById('order-to-lat') ? document.getElementById('order-to-lat').value : '';
+      var toLng = document.getElementById('order-to-lng') ? document.getElementById('order-to-lng').value : '';
+      var distance = 0;
+      if (window.__orderMap && window.__orderMap._getRouteInfo) {
+        distance = window.__orderMap._getRouteInfo().distance || 0;
+      }
+
       showToast('正在提交订单...', '');
       var order = await DB.createOrder({
         userId: State.currentUser.id,
         from: from, to: to, price: price,
+        from_lat: fromLat || null, from_lng: fromLng || null,
+        to_lat: toLat || null, to_lng: toLng || null,
+        distance: distance || null,
         status: 'pending'
       });
       if (!order) { showToast('下单失败，请重试', 'error'); return; }
@@ -1451,9 +1496,22 @@ function bindEvents() {
       if (!to) { showToast('请输入目的地', 'error'); return; }
       if (!price || isNaN(price) || Number(price) <= 0) { showToast('请输入有效的费用金额', 'error'); return; }
 
+      // 获取经纬度和距离
+      var dFromLat = document.getElementById('drv-co-from-lat') ? document.getElementById('drv-co-from-lat').value : '';
+      var dFromLng = document.getElementById('drv-co-from-lng') ? document.getElementById('drv-co-from-lng').value : '';
+      var dToLat = document.getElementById('drv-co-to-lat') ? document.getElementById('drv-co-to-lat').value : '';
+      var dToLng = document.getElementById('drv-co-to-lng') ? document.getElementById('drv-co-to-lng').value : '';
+      var dDistance = 0;
+      if (window.__drvMap && window.__drvMap._getRouteInfo) {
+        dDistance = window.__drvMap._getRouteInfo().distance || 0;
+      }
+
       showToast('正在创建订单...', '');
       var order = await DB.createOrder({
         from: from, to: to, price: price,
+        from_lat: dFromLat || null, from_lng: dFromLng || null,
+        to_lat: dToLat || null, to_lng: dToLng || null,
+        distance: dDistance || null,
         status: 'accepted',
         driverId: State.currentUser.id,
         customerName: customerName,
@@ -1600,6 +1658,39 @@ async function handleAction(action, dataset) {
       }
       break;
     }
+  }
+}
+
+// ============================================================
+//  页面后置初始化 - 地图、动态组件等
+// ============================================================
+async function initPageExtras() {
+  // 初始化订单详情页的路线地图
+  if (State.currentPage === 'order-detail' && State.pageParams.orderId) {
+    var order = await DB.getOrderById(State.pageParams.orderId);
+    if (order && order.fromLat && order.fromLng && order.toLat && order.toLng) {
+      setTimeout(function() {
+        initRouteDisplayMap('detail-route-map', order.fromLat, order.fromLng, order.toLat, order.toLng, {
+          showInfo: true
+        });
+      }, 100);
+    }
+  }
+  
+  // 初始化接单大厅的订单卡片小地图
+  if (State.currentPage === 'order-hall') {
+    var miniMaps = document.querySelectorAll('.hall-mini-map');
+    miniMaps.forEach(function(el) {
+      var fl = el.dataset.fromLat, fg = el.dataset.fromLng;
+      var tl = el.dataset.toLat, tg = el.dataset.toLng;
+      if (fl && fg && tl && tg) {
+        setTimeout(function() {
+          initRouteDisplayMap(el.id, parseFloat(fl), parseFloat(fg), parseFloat(tl), parseFloat(tg), {
+            disableZoom: true
+          });
+        }, 150);
+      }
+    });
   }
 }
 

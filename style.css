@@ -509,6 +509,27 @@ select.form-control { cursor: pointer; }
   color: var(--text);
 }
 
+/* 订单详情页路线地图 */
+.detail-route-map {
+  width: 100%;
+  height: 200px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #f0f0f0;
+}
+
+/* 接单大厅订单卡片迷你地图 */
+.hall-mini-map {
+  width: 100%;
+  height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #f0f0f0;
+  margin-bottom: 10px;
+}
+
 /* 地图占位符（兼容旧页面） */
 .map-placeholder {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

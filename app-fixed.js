@@ -1976,14 +1976,19 @@ function bindEvents() {
     }
   }
   
-  // 如果TMap已就绪，直接初始化；否则等待
-  if (typeof TMap !== 'undefined') {
+  // 如果地图API已就绪，直接初始化；否则等待
+  var mapReady = typeof TMap !== 'undefined' || typeof AMap !== 'undefined';
+  if (mapReady) {
     doInitMaps();
   } else {
-    window.addEventListener('tmap-ready', function onReady() {
+    // 等待任意地图API就绪
+    var mapReadyHandler = function() {
       doInitMaps();
-      window.removeEventListener('tmap-ready', onReady);
-    });
+      window.removeEventListener('tmap-ready', mapReadyHandler);
+      window.removeEventListener('amap-ready', mapReadyHandler);
+    };
+    window.addEventListener('tmap-ready', mapReadyHandler);
+    window.addEventListener('amap-ready', mapReadyHandler);
   }
 
   // ===== 估算费用 =====

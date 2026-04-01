@@ -1,7 +1,10 @@
 /* ================================================
-   代驾出行 - v2.0 (Supabase)
+   代驾出行 - v2.1 (Supabase)
    安全 · 快捷 · 专业 · 多端同步
 ================================================ */
+
+// 当前版本号（每次发布请更新）
+window.APP_VERSION = 'v2.1-20260401';
 
 // 全局错误处理
 window.onerror = function(msg, url, line, col, error) {
@@ -950,6 +953,7 @@ function renderHome() {
       '</div>' +
     '</div>' +
     '<p class="home-footer">© 2026 代驾出行 · 数据云端同步</p>' +
+    '<div class="home-version">' + (window.APP_VERSION || 'v1.0') + '</div>' +
   '</div>';
 }
 

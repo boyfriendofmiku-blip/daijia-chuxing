@@ -52,18 +52,20 @@
       tryLoad();
     })();
   </script>
-  <!-- 腾讯地图（callback确保API就绪后才初始化） -->
-  <script src="https://map.qq.com/api/gljs?v=1.exp&key=OB4BZ-D4W3U-B7VVO-4PJWW-6TKDJ-WPB77&callback=onTMapReady"></script>
+  <!-- 高德地图 API -->
+  <script type="text/javascript">
+    window._AMapConfig = { key: 'b3cddedde87cf8a33f6e7122c8c9cfa7' };
+  </script>
+  <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=b3cddedde87cf8a33f6e7122c8c9cfa7&callback=onAMapReady"></script>
   <script>
-    // 地图API就绪标记和事件
-    window.__tmapReady = false;
-    window.onTMapReady = function() {
-      window.__tmapReady = true;
-      console.log('腾讯地图API已就绪');
-      window.dispatchEvent(new Event('tmap-ready'));
+    window.__amapReady = false;
+    window.onAMapReady = function() {
+      window.__amapReady = true;
+      console.log('高德地图API已就绪');
+      window.dispatchEvent(new Event('amap-ready'));
     };
     
-    // 监听Supabase加载失败事件，切换为本地存储模式
+    // 监听Supabase加载失败事件
     window.addEventListener('supabase-load-failed', function() {
       console.warn('Supabase不可用，切换为本地存储模式');
       window.__useLocalStorage = true;
@@ -76,6 +78,7 @@
   </div>
   <script src="supabase.js"></script>
   <script src="app-fixed.js"></script>
+  <script src="amap-adapter.js"></script>
   <script src="staff.js"></script>
   <script>
     // 注册 Service Worker（失败不影响应用运行）

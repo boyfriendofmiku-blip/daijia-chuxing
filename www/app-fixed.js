@@ -4,7 +4,94 @@
 ================================================ */
 
 // 当前版本号（每次发布请更新）
-window.APP_VERSION = 'v2.1-20260401';
+window.APP_VERSION = 'v2.2-20260401';
+
+// 高德地图兼容层：让旧代码（TMap）兼容高德 API
+window.addEventListener('amap-ready', function() {
+  // 模拟 TMap 全局对象
+  window.TMap = {
+    LatLng: function(lat, lng) {
+      return { getLat: function() { return lat; }, getLng: function() { return lng; } };
+    },
+    Map: function(div, opts) {
+      return new AMap.Map(div, opts);
+    },
+    service: {
+      Geocoder: function() {
+        return {
+          getAddress: function(opts) {
+            return new Promise(function(resolve, reject) {
+              AMap.plugin('AMap.Geocoder', function() {
+                var geocoder = new AMap.Geocoder({ city: '全国' });
+                geocoder.getAddress(opts.location, function(status, result) {
+                  if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
+                    resolve({ result: { address: result.geocodes[0].formattedAddress } });
+                  } else {
+                    reject(result);
+                  }
+                });
+              });
+            });
+          }
+        };
+      },
+      DrivingService: function() {
+        return {
+          search: function(opts, callback) {
+            AMap.plugin('AMap.Driving', function() {
+              var driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME });
+              driving.search(opts.from, opts.to, function(status, result) {
+                callback({ result: result });
+              });
+            });
+          }
+        };
+      },
+      PoiSearch: function() {
+        return {
+          search: function(opts) {
+            return new Promise(function(resolve, reject) {
+              AMap.plugin('AMap.PlaceSearch', function() {
+                var placeSearch = new AMap.PlaceSearch({ pageSize: 8, city: '全国' });
+                placeSearch.search(opts.keyword, function(status, result) {
+                  if (status === 'complete' && result.poiList) {
+                    resolve({ data: result.poiList.pois.map(function(p) {
+                      return { title: p.name, address: p.address, location: { lat: p.location.getLat(), lng: p.location.getLng() } };
+                    }) });
+                  } else {
+                    resolve({ data: [] });
+                  }
+                });
+              });
+            });
+          }
+        };
+      }
+    },
+    MultiMarker: function(opts) {
+      return new AMap.Marker({
+        position: opts.geometries[0].position,
+        content: opts.geometries[0].content,
+        offset: new AMap.Pixel(-30, -15)
+      });
+    },
+    MultiPolyline: function(opts) {
+      return new AMap.Polyline({
+        path: opts.geometries[0].paths[0],
+        strokeColor: opts.styles['route-style'].color,
+        strokeWeight: opts.styles['route-style'].width,
+        strokeStyle: 'solid'
+      });
+    },
+    PolylineStyle: function(opts) { return opts; },
+    LatLngBounds: function(sw, ne) {
+      return { contains: function() { return true; } };
+    }
+  };
+  window.__tmapReady = true;
+  console.log('高德地图已加载，TMap兼容层已启用');
+  window.dispatchEvent(new Event('tmap-ready'));
+});
 
 // 全局错误处理
 window.onerror = function(msg, url, line, col, error) {
@@ -57,7 +144,25 @@ window.addEventListener('unhandledrejection', function(e) {
 // 初始化下单/创单页的交互式地图（支持路线规划）
 // opts: { mapDivId, fromInputId, fromLatId, fromLngId, toInputId, toLatId, toLngId,
 //         searchInputId, searchResultsId, locateBtnId, toolInfoId, routeInfoId }
+// 高德地图适配器已在 amap-adapter.js 中实现
+// 此处保留兼容：直接调用全局适配器函数
 function initOrderMap(opts) {
+  if (typeof window.initAMapOrderMap === 'function') {
+    return window.initAMapOrderMap(opts);
+  }
+  console.warn('高德地图适配器未加载');
+  var toolInfo = document.getElementById(opts.toolInfoId);
+  if (toolInfo) toolInfo.textContent = '地图加载中...';
+  return null;
+}
+
+function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) {
+  if (typeof window.initAMapRouteDisplay === 'function') {
+    return window.initAMapRouteDisplay(mapDivId, fromLat, fromLng, toLat, toLng, options);
+  }
+  console.warn('高德地图适配器未加载');
+  return null;
+}
   var mapDiv = document.getElementById(opts.mapDivId);
   var fromInput = document.getElementById(opts.fromInputId);
   var toInput = document.getElementById(opts.toInputId);
@@ -1103,10 +1208,17 @@ function renderCreateOrder() {
   return '<div class="page">' +
     '<div class="page-header"><button class="back-btn" data-action="user-main">←</button><h2>叫代驾</h2></div>' +
     '<div class="page-content">' +
+      '<div class="map-container" id="order-map-container">' +
+        '<div id="order-map" class="map-canvas"></div>' +
+        '<div class="map-search-bar"><div class="map-search-input-wrap"><span class="map-search-icon">🔍</span><input class="map-search-input" id="map-search-input" placeholder="搜索地点..." /></div></div>' +
+        '<div class="map-search-results" id="map-search-results" style="display:none"></div>' +
+        '<div class="map-toolbar"><button class="map-tool-btn" id="map-locate-btn" title="定位当前位置">📍</button><div class="map-tool-info" id="map-tool-info">点击地图选择位置</div></div>' +
+        '<div id="route-info" class="route-info-panel" style="display:none"></div>' +
+      '</div>' +
       '<div class="card">' +
-        '<div class="form-group"><label>🟢 出发地</label><input class="form-control" id="order-from" placeholder="请输入出发地址（如：北京市朝阳区XX路XX号）" /></div>' +
+        '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-from" placeholder="请输入出发地址" /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
         '<div style="text-align:center;color:var(--text-muted);font-size:18px;padding:2px 0">⇅</div>' +
-        '<div class="form-group"><label>🔴 目的地</label><input class="form-control" id="order-to" placeholder="请输入目的地址（如：北京市海淀区XX路XX号）" /></div>' +
+        '<div class="form-group"><label>🔴 目的地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-to" placeholder="请输入目的地址" /><input type="hidden" id="order-to-lat" /><input type="hidden" id="order-to-lng" /></div>' +
         '<div class="form-group"><label>📝 备注（可选）</label><input class="form-control" id="order-note" placeholder="例：喝了点酒，车停在地下车库B1" /></div>' +
       '</div>' +
       '<div id="price-estimate-box" style="display:none" class="price-estimate"><div><div class="price-label">预估费用</div><div style="font-size:12px;opacity:0.8;margin-top:2px">实际费用以完成订单为准</div></div><div class="price-value" id="price-display">¥0</div></div>' +

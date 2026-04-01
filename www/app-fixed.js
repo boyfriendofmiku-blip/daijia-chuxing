@@ -1103,17 +1103,10 @@ function renderCreateOrder() {
   return '<div class="page">' +
     '<div class="page-header"><button class="back-btn" data-action="user-main">←</button><h2>叫代驾</h2></div>' +
     '<div class="page-content">' +
-      '<div class="map-container" id="order-map-container">' +
-        '<div id="order-map" class="map-canvas"></div>' +
-        '<div class="map-search-bar"><div class="map-search-input-wrap"><span class="map-search-icon">🔍</span><input class="map-search-input" id="map-search-input" placeholder="搜索地点..." /></div></div>' +
-        '<div class="map-search-results" id="map-search-results" style="display:none"></div>' +
-        '<div class="map-toolbar"><button class="map-tool-btn" id="map-locate-btn" title="定位当前位置">📍</button><div class="map-tool-info" id="map-tool-info">点击地图选择位置</div></div>' +
-        '<div id="route-info" class="route-info-panel" style="display:none"></div>' +
-      '</div>' +
       '<div class="card">' +
-        '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-from" placeholder="请输入出发地址" /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
+        '<div class="form-group"><label>🟢 出发地</label><input class="form-control" id="order-from" placeholder="请输入出发地址（如：北京市朝阳区XX路XX号）" /></div>' +
         '<div style="text-align:center;color:var(--text-muted);font-size:18px;padding:2px 0">⇅</div>' +
-        '<div class="form-group"><label>🔴 目的地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-to" placeholder="请输入目的地址" /><input type="hidden" id="order-to-lat" /><input type="hidden" id="order-to-lng" /></div>' +
+        '<div class="form-group"><label>🔴 目的地</label><input class="form-control" id="order-to" placeholder="请输入目的地址（如：北京市海淀区XX路XX号）" /></div>' +
         '<div class="form-group"><label>📝 备注（可选）</label><input class="form-control" id="order-note" placeholder="例：喝了点酒，车停在地下车库B1" /></div>' +
       '</div>' +
       '<div id="price-estimate-box" style="display:none" class="price-estimate"><div><div class="price-label">预估费用</div><div style="font-size:12px;opacity:0.8;margin-top:2px">实际费用以完成订单为准</div></div><div class="price-value" id="price-display">¥0</div></div>' +

@@ -828,20 +828,26 @@ function isNightTime() {
   return hour >= 22 || hour < 6;
 }
 
-// ============ 通知模块（保留本地） ============
+// ============ 通知模块（本地localStorage存储） ============
+function _getNotifications() {
+  try { return JSON.parse(localStorage.getItem('dj_notifications') || '[]'); } catch(e) { return []; }
+}
+function _saveNotifications(list) {
+  try { localStorage.setItem('dj_notifications', JSON.stringify(list)); } catch(e) {}
+}
 function addNotification(userId, title, content, type) {
-  var list = DB.getList('notifications') || [];
-  list.unshift({ id: genId(), userId: userId, title: title, content: content, type: type || 'info', time: now(), read: false });
+  var list = _getNotifications();
+  list.unshift({ id: genId(), userId: String(userId), title: title, content: content, type: type || 'info', time: now(), read: false });
   if (list.length > 100) list = list.slice(0, 100);
-  DB.set('notifications', list);
+  _saveNotifications(list);
 }
 function getUnreadCount(userId) {
-  return (DB.getList('notifications') || []).filter(function(n) { return n.userId === userId && !n.read; }).length;
+  return _getNotifications().filter(function(n) { return n.userId === String(userId) && !n.read; }).length;
 }
 function markAllRead(userId) {
-  var list = DB.getList('notifications') || [];
-  list.forEach(function(n) { if (n.userId === userId) n.read = true; });
-  DB.set('notifications', list);
+  var list = _getNotifications();
+  list.forEach(function(n) { if (n.userId === String(userId)) n.read = true; });
+  _saveNotifications(list);
 }
 
 // ============ Loading 状态 ============
@@ -1569,8 +1575,8 @@ async function renderStats() {
 function renderNotifications() {
   var u = State.currentUser;
   var isDriver = u.type === 'driver';
-  var allNotifs = DB.getList('notifications') || [];
-  var myNotifs = allNotifs.filter(function(n) { return n.userId === u.id; });
+  var allNotifs = _getNotifications();
+  var myNotifs = allNotifs.filter(function(n) { return n.userId === String(u.id); });
   var unreadNotifs = myNotifs.filter(function(n) { return !n.read; });
   if (unreadNotifs.length > 0) { markAllRead(u.id); }
   var notifs = myNotifs.slice(0, 30);
@@ -1864,77 +1870,37 @@ function bindEvents() {
 
   // ===== 估算费用 =====
   var estimateBtn = document.getElementById('estimate-btn');
-  console.log('费用估算按钮元素:', estimateBtn);
   if (estimateBtn) {
     estimateBtn.addEventListener('click', function() {
-      console.log('费用估算按钮被点击');
-      var from = document.getElementById('order-from');
-      var to = document.getElementById('order-to');
-      
-      if (!from || !to) {
-        console.error('未找到输入框元素');
-        showToast('页面元素加载异常', 'error');
+      var fromVal = (document.getElementById('order-from') || {}).value || '';
+      var toVal   = (document.getElementById('order-to')   || {}).value || '';
+      fromVal = fromVal.trim();
+      toVal   = toVal.trim();
+
+      if (!fromVal || !toVal) {
+        showToast('请输入出发地和目的地', 'error');
         return;
       }
-      
-      var fromVal = from.value.trim();
-      var toVal = to.value.trim();
-      console.log('出发地:', fromVal, '目的地:', toVal);
-      
-      if (!fromVal || !toVal) { 
-        showToast('请输入出发地和目的地', 'error'); 
-        return; 
-      }
-      
-      // 检查是否有经纬度
-      var fromLat = document.getElementById('order-from-lat');
-      var fromLng = document.getElementById('order-from-lng');
-      var toLat = document.getElementById('order-to-lat');
-      var toLng = document.getElementById('order-to-lng');
-      
-      var fromLatVal = fromLat ? fromLat.value : '';
-      var fromLngVal = fromLng ? fromLng.value : '';
-      var toLatVal = toLat ? toLat.value : '';
-      var toLngVal = toLng ? toLng.value : '';
-      
-      // 如果没有经纬度，使用基于地址长度的估算（不再阻止）
-      var hasCoords = fromLatVal && fromLngVal && toLatVal && toLngVal;
-      console.log('是否有经纬度:', hasCoords, fromLatVal, fromLngVal, toLatVal, toLngVal);
-      
-      if (!hasCoords) {
-        showToast('未检测到地图位置，使用地址估算费用', 'warning');
-      }
-      
+
       var price = estimatePrice(fromVal, toVal);
-      console.log('估算价格:', price);
-      
-      var box = document.getElementById('price-estimate-box');
+
+      var box     = document.getElementById('price-estimate-box');
       var display = document.getElementById('price-display');
-      console.log('费用显示元素:', box, display);
-      
       if (box && display) {
         var nightNote = isNightTime() ? '<div style="font-size:11px;color:#E67E22;margin-top:4px">🌙 含夜间服务费（+30%）</div>' : '';
-        var coordsNote = !hasCoords ? '<div style="font-size:11px;color:#E67E22;margin-top:4px">⚠️ 地图位置缺失，费用可能不准确</div>' : '';
-        display.innerHTML = '¥' + price + nightNote + coordsNote;
+        display.innerHTML = '¥' + price + nightNote;
         box.style.display = 'flex';
-        console.log('费用显示已更新');
       }
-      
+
       var submitBtn = document.getElementById('submit-order-btn');
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.dataset.from = fromVal;
-        submitBtn.dataset.to = toVal;
+        submitBtn.dataset.from  = fromVal;
+        submitBtn.dataset.to    = toVal;
         submitBtn.dataset.price = price;
-        console.log('下单按钮已启用');
       }
       showToast('预估费用：¥' + price, 'success');
     });
-    
-    // 立即测试按钮是否可点击
-    console.log('费用估算按钮事件已绑定');
-  } else {
-    console.error('未找到费用估算按钮元素');
   }
 
   // ===== 下单按钮（异步） =====
@@ -2056,9 +2022,10 @@ function bindEvents() {
       var contact = document.getElementById('feedback-contact').value.trim();
       if (!content) { showToast('请输入反馈内容', 'error'); return; }
       if (content.length < 5) { showToast('反馈内容至少5个字', 'error'); return; }
-      var list = DB.getList('feedbacks') || [];
+      var list = JSON.parse(localStorage.getItem('dj_feedbacks') || '[]');
       list.unshift({ id: genId(), userId: State.currentUser.id, type: feedbackType, content: content, contact: contact, time: now() });
-      DB.set('feedbacks', list);
+      try { localStorage.setItem('dj_feedbacks', JSON.stringify(list)); } catch(e) {}
+
       showToast('反馈提交成功！感谢您的宝贵意见 💚', 'success');
       setTimeout(function() { navigate('profile'); }, 800);
     });

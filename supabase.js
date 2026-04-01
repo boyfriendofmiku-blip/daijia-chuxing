@@ -210,50 +210,90 @@ const DB = {
   // ============ 订单操作 ============
   async createOrder(order) {
     const orderNo = 'DJ' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
-    const insertData = {
+    const now = new Date().toLocaleString('zh-CN', { hour12: false });
+
+    // 尝试写入 Supabase
+    if (window.supabase) {
+      const insertData = {
+        order_no: orderNo,
+        passenger_id: order.userId ? parseInt(order.userId) : null,
+        driver_id: order.driverId ? parseInt(order.driverId) : null,
+        status: order.status || 'pending',
+        from_addr: order.from,
+        to_addr: order.to,
+        from_lat: order.from_lat || null,
+        from_lng: order.from_lng || null,
+        to_lat: order.to_lat || null,
+        to_lng: order.to_lng || null,
+        distance: order.distance || null,
+        price: parseFloat(order.price) || 0
+      };
+
+      try {
+        const { data, error } = await sb()
+          .from('orders')
+          .insert(insertData)
+          .select()
+          .single();
+
+        if (!error && data) {
+          return {
+            id: String(data.id),
+            order_no: data.order_no,
+            userId: data.passenger_id ? String(data.passenger_id) : null,
+            driverId: data.driver_id ? String(data.driver_id) : null,
+            status: data.status,
+            from: data.from_addr,
+            to: data.to_addr,
+            price: String(data.price),
+            createdAt: data.created_at ? new Date(data.created_at).toLocaleString('zh-CN', { hour12: false }) : now,
+            acceptedAt: data.accepted_at ? new Date(data.accepted_at).toLocaleString('zh-CN', { hour12: false }) : null,
+            completedAt: data.completed_at ? new Date(data.completed_at).toLocaleString('zh-CN', { hour12: false }) : null,
+            note: order.note || '',
+            customerName: order.customerName || '',
+            customerPhone: order.customerPhone || '',
+            createdByDriver: order.createdByDriver || false,
+            _sb_id: data.id
+          };
+        }
+        console.warn('createOrder Supabase失败，降级本地存储:', error);
+      } catch(e) {
+        console.warn('createOrder 异常，降级本地存储:', e);
+      }
+    }
+
+    // 降级：本地 localStorage 存储
+    const localId = 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const localOrder = {
+      id: localId,
       order_no: orderNo,
-      passenger_id: order.userId ? parseInt(order.userId) : null,
-      driver_id: order.driverId ? parseInt(order.driverId) : null,
+      userId: order.userId ? String(order.userId) : null,
+      driverId: order.driverId ? String(order.driverId) : null,
       status: order.status || 'pending',
-      from_addr: order.from,
-      to_addr: order.to,
+      from: order.from,
+      to: order.to,
       from_lat: order.from_lat || null,
       from_lng: order.from_lng || null,
       to_lat: order.to_lat || null,
       to_lng: order.to_lng || null,
       distance: order.distance || null,
-      price: parseFloat(order.price) || 0
-    };
-
-    const { data, error } = await sb()
-      .from('orders')
-      .insert(insertData)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('createOrder error:', error);
-      return null;
-    }
-
-    return {
-      id: String(data.id),
-      order_no: data.order_no,
-      userId: data.passenger_id ? String(data.passenger_id) : null,
-      driverId: data.driver_id ? String(data.driver_id) : null,
-      status: data.status,
-      from: data.from_addr,
-      to: data.to_addr,
-      price: String(data.price),
-      createdAt: data.created_at ? new Date(data.created_at).toLocaleString('zh-CN', { hour12: false }) : '',
-      acceptedAt: data.accepted_at ? new Date(data.accepted_at).toLocaleString('zh-CN', { hour12: false }) : null,
-      completedAt: data.completed_at ? new Date(data.completed_at).toLocaleString('zh-CN', { hour12: false }) : null,
+      price: String(parseFloat(order.price) || 0),
+      createdAt: now,
+      acceptedAt: null,
+      completedAt: null,
       note: order.note || '',
       customerName: order.customerName || '',
       customerPhone: order.customerPhone || '',
       createdByDriver: order.createdByDriver || false,
-      _sb_id: data.id
+      _local: true
     };
+    try {
+      var localOrders = JSON.parse(localStorage.getItem('dj_local_orders') || '[]');
+      localOrders.unshift(localOrder);
+      localStorage.setItem('dj_local_orders', JSON.stringify(localOrders));
+    } catch(e) {}
+    console.log('订单已保存到本地存储（离线模式）:', localOrder.id);
+    return localOrder;
   },
 
   async updateOrder(orderId, updates) {
@@ -281,6 +321,16 @@ const DB = {
   },
 
   async getOrderById(orderId) {
+    // 先检查本地存储
+    if (String(orderId).startsWith('local_')) {
+      try {
+        var localOrders = JSON.parse(localStorage.getItem('dj_local_orders') || '[]');
+        var found = localOrders.find(function(o) { return o.id === String(orderId); });
+        if (found) return found;
+      } catch(e) {}
+      return null;
+    }
+
     const { data, error } = await sb()
       .from('orders')
       .select('*')

@@ -21,34 +21,43 @@ function initOrderMap(opts) {
   }
   
   console.log('[AMap] 开始初始化地图');
-
-  var selectMode = 'from';
-  var fromMarker = null;
-  var toMarker = null;
-  var routeLine = null;
-  var routeDistance = 0;
-  var routeDuration = 0;
-
-  // 初始化地图（默认广州）
-  var map = new AMap.Map(mapDiv, {
-    zoom: 13,
-    center: [113.264, 23.129],
-    mapStyle: 'amap://styles/light'
+  
+  // 需要异步加载的插件
+  AMap.plugin(['AMap.Geocoder', 'AMap.Driving', 'AMap.PlaceSearch', 'AMap.Geolocation'], function() {
+    initMapWithPlugins(opts);
   });
+  
+  function initMapWithPlugins(opts) {
+    console.log('[AMap] 插件加载完成');
+    
+    var selectMode = 'from';
+    var fromMarker = null;
+    var toMarker = null;
+    var routeLine = null;
+    var routeDistance = 0;
+    var routeDuration = 0;
 
-  var geocoder = new AMap.Geocoder({ city: '全国' });
-  var driving = new AMap.Driving({
-    policy: AMap.DrivingPolicy.LEAST_TIME,
-    city: '全国'
-  });
-  var placeSearch = new AMap.PlaceSearch({
-    pageSize: 8,
-    pageIndex: 1,
-    city: '全国'
-  });
+    // 初始化地图（默认广州）
+    var map = new AMap.Map(mapDiv, {
+      zoom: 13,
+      center: [113.264, 23.129],
+      mapStyle: 'amap://styles/light'
+    });
 
-  var toolInfo = document.getElementById(opts.toolInfoId);
-  var routeInfoEl = document.getElementById(opts.routeInfoId);
+    // 使用插件方式创建的地理编码服务
+    var geocoder = new AMap.Geocoder({ city: '全国', radius: 1000 });
+    var driving = new AMap.Driving({
+      policy: AMap.DrivingPolicy.LEAST_TIME,
+      city: '全国'
+    });
+    var placeSearch = new AMap.PlaceSearch({
+      pageSize: 8,
+      pageIndex: 1,
+      city: '全国'
+    });
+
+    var toolInfo = document.getElementById(opts.toolInfoId);
+    var routeInfoEl = document.getElementById(opts.routeInfoId);
 
   function updateInfo(text) {
     if (toolInfo) toolInfo.textContent = text;

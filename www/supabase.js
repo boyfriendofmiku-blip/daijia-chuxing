@@ -7,21 +7,37 @@ const SUPABASE_URL = 'https://qwxsnqeigqrslewqdjco.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_p1hgv-jDE3SBZ5_MoaU_5Q_UYEsMl8h';
 
 let _sb = null;
+
+// 模拟Supabase对象（当SDK未加载时使用）
+function _mockSb() {
+  var mockQuery = function() {
+    var q = {
+      select: function() { return q; },
+      insert: function() { return q; },
+      update: function() { return q; },
+      eq: function() { return q; },
+      order: function() { return q; },
+      limit: function() { return q; },
+      single: function() { return Promise.resolve({ data: null, error: { code: 'NO_SUPABASE', message: 'Supabase SDK未加载' } }); },
+      then: function(cb) { return Promise.resolve({ data: [], error: null }).then(cb); }
+    };
+    return q;
+  };
+  return {
+    from: function() { return mockQuery(); },
+    channel: function() {
+      return {
+        on: function() { return { subscribe: function() { return {}; } }; }
+      };
+    }
+  };
+}
+
 function sb() {
   if (!_sb) {
-    // 安全检查：确保Supabase SDK已加载
     if (!window.supabase) {
-      console.error('Supabase SDK未加载！请检查CDN脚本。');
-      // 返回一个模拟的supabase对象，避免应用崩溃
-      return {
-        from: () => ({ 
-          select: () => ({ 
-            eq: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) 
-          }),
-          insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: { code: 'NO_SUPABASE', message: 'Supabase SDK未加载' } }) }) }),
-          update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }),
-          channel: () => ({ on: () => ({ subscribe: () => ({}) }) })
-        };
+      console.warn('Supabase SDK未加载，使用模拟对象');
+      return _mockSb();
     }
     _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   }
@@ -326,3 +342,11 @@ const DB = {
 
 // 将DB对象挂载到window，确保其他文件可以访问
 window.DB = DB;
+
+// 监听Supabase SDK加载成功事件，重新初始化client
+window.addEventListener('supabase-loaded', function() {
+  console.log('Supabase SDK加载成功，初始化client');
+  _sb = null; // 重置，让下次sb()调用重新创建
+});
+
+console.log('supabase.js加载完毕，DB对象已挂载到window.DB');

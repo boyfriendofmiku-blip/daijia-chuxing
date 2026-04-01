@@ -2277,8 +2277,29 @@ function startRealtime() {
 // ============================================================
 //  初始化
 // ============================================================
-window.addEventListener('DOMContentLoaded', function() {
-  // 不再初始化本地demo数据，直接从Supabase读取
+function _startApp() {
   startRealtime();
   navigate('home');
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+  // supabase.js是同步加载的，DB此时应已在window上
+  // 如果仍未定义（例如supabase.js有错误），等待supabase-loaded事件
+  if (typeof window.DB !== 'undefined') {
+    _startApp();
+    return;
+  }
+  console.warn('window.DB未就绪，等待supabase.js加载...');
+  var started = false;
+  function onReady() {
+    if (started) return;
+    started = true;
+    window.removeEventListener('supabase-loaded', onReady);
+    window.removeEventListener('supabase-load-failed', onReady);
+    _startApp();
+  }
+  window.addEventListener('supabase-loaded', onReady);
+  window.addEventListener('supabase-load-failed', onReady);
+  // 保底：3秒后强制启动
+  setTimeout(onReady, 3000);
 });

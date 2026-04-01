@@ -163,8 +163,9 @@ function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) 
   console.warn('高德地图适配器未加载');
   return null;
 }
-  var mapDiv = document.getElementById(opts.mapDivId);
-  var fromInput = document.getElementById(opts.fromInputId);
+
+// ============ 路线展示地图（只读，用于订单详情/接单大厅） ============
+function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) {
   var toInput = document.getElementById(opts.toInputId);
   var searchInput = document.getElementById(opts.searchInputId);
   var searchResults = document.getElementById(opts.searchResultsId);

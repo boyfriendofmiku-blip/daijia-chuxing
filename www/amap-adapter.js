@@ -1,18 +1,26 @@
 // 高德地图 API 适配器
 // 用 AMap 替换 TMap
 
+console.log('[AMap] 适配器加载');
+
 // 主函数定义
 function initOrderMap(opts) {
+  console.log('[AMap] initOrderMap 调用', opts);
   var mapDiv = document.getElementById(opts.mapDivId);
-  if (!mapDiv) return;
+  if (!mapDiv) {
+    console.warn('[AMap] mapDiv未找到:', opts.mapDivId);
+    return;
+  }
   
   // 检查高德地图 API
   if (typeof AMap === 'undefined') {
-    console.warn('高德地图API未加载');
+    console.warn('[AMap] 高德地图API未加载');
     var toolInfo = document.getElementById(opts.toolInfoId);
     if (toolInfo) toolInfo.textContent = '地图加载中...';
     return;
   }
+  
+  console.log('[AMap] 开始初始化地图');
 
   var selectMode = 'from';
   var fromMarker = null;

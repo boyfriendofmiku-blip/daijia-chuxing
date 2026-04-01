@@ -1945,14 +1945,17 @@ function bindEvents() {
   }
   
   function doInitMaps() {
+    console.log('[Map] doInitMaps 执行');
     // 检查高德或腾讯地图API
     var mapReady = typeof TMap !== 'undefined' || typeof AMap !== 'undefined';
+    console.log('[Map] API状态 - TMap:', typeof TMap, 'AMap:', typeof AMap);
     if (!mapReady) {
-      console.warn('地图API未就绪');
+      console.warn('[Map] 地图API未就绪');
       return;
     }
     
     var orderMapEl = document.getElementById('order-map');
+    console.log('[Map] order-map元素:', orderMapEl);
     if (orderMapEl) {
       window.__orderMap = initOrderMap({
         mapDivId: 'order-map',

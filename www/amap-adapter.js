@@ -1,10 +1,7 @@
 // 高德地图 API 适配器
 // 用 AMap 替换 TMap
 
-// 导出全局函数供 app-fixed.js 调用
-window.initAMapOrderMap = initOrderMap;
-window.initAMapRouteDisplay = initRouteDisplayMap;
-
+// 主函数定义
 function initOrderMap(opts) {
   var mapDiv = document.getElementById(opts.mapDivId);
   if (!mapDiv) return;
@@ -375,3 +372,7 @@ function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) 
 
   return { map: map };
 }
+
+// 导出全局函数供 app-fixed.js 调用
+window.initAMapOrderMap = initOrderMap;
+window.initAMapRouteDisplay = initRouteDisplayMap;

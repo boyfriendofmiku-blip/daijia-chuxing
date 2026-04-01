@@ -4,7 +4,7 @@
 ================================================ */
 
 // 当前版本号（每次发布请更新）
-window.APP_VERSION = 'v2.2-20260401';
+window.APP_VERSION = 'v2.2-20260401-b';
 
 // 高德地图兼容层：让旧代码（TMap）兼容高德 API
 window.addEventListener('amap-ready', function() {

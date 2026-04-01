@@ -1011,9 +1011,10 @@ async function render() {
   
   // 页面后置初始化（地图等需要DOM渲染后初始化的组件）
   // 如果地图API还未就绪，等待就绪后再初始化
-  if (typeof TMap !== 'undefined') {
+  var mapReady = typeof TMap !== 'undefined' || typeof AMap !== 'undefined';
+  if (mapReady) {
     initPageExtras();
-  } else if (window.__tmapReady) {
+  } else if (window.__tmapReady || window.__amapReady) {
     initPageExtras();
   } else {
     // 监听地图API就绪事件
@@ -1944,8 +1945,15 @@ function bindEvents() {
   }
   
   function doInitMaps() {
+    // 检查高德或腾讯地图API
+    var mapReady = typeof TMap !== 'undefined' || typeof AMap !== 'undefined';
+    if (!mapReady) {
+      console.warn('地图API未就绪');
+      return;
+    }
+    
     var orderMapEl = document.getElementById('order-map');
-    if (orderMapEl && typeof TMap !== 'undefined') {
+    if (orderMapEl) {
       window.__orderMap = initOrderMap({
         mapDivId: 'order-map',
         fromInputId: 'order-from', fromLatId: 'order-from-lat', fromLngId: 'order-from-lng',
@@ -1956,7 +1964,7 @@ function bindEvents() {
       });
     }
     var drvMapEl = document.getElementById('drv-order-map');
-    if (drvMapEl && typeof TMap !== 'undefined') {
+    if (drvMapEl && (typeof TMap !== 'undefined' || typeof AMap !== 'undefined')) {
       window.__drvMap = initOrderMap({
         mapDivId: 'drv-order-map',
         fromInputId: 'drv-co-from', fromLatId: 'drv-co-from-lat', fromLngId: 'drv-co-from-lng',
@@ -2264,10 +2272,24 @@ async function handleAction(action, dataset) {
 //  页面后置初始化 - 地图、动态组件等
 // ============================================================
 async function initPageExtras() {
-  // 检查地图API是否就绪
-  if (typeof TMap === 'undefined') {
+  // 检查地图API是否就绪（支持高德或腾讯地图）
+  if (typeof TMap === 'undefined' && typeof AMap === 'undefined') {
     console.warn('地图API未就绪，跳过地图初始化');
     return;
+  }
+  
+  // 如果高德地图已就绪但TMap兼容层未就绪，等待一下
+  if (typeof AMap !== 'undefined' && typeof TMap === 'undefined') {
+    console.log('等待TMap兼容层就绪...');
+    await new Promise(function(resolve) {
+      var checkTmap = setInterval(function() {
+        if (typeof TMap !== 'undefined') {
+          clearInterval(checkTmap);
+          resolve();
+        }
+      }, 100);
+      setTimeout(function() { clearInterval(checkTmap); resolve(); }, 5000);
+    });
   }
   
   // 初始化订单详情页的路线地图

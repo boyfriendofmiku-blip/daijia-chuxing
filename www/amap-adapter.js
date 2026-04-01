@@ -59,7 +59,7 @@ function initOrderMap(opts) {
     var toolInfo = document.getElementById(opts.toolInfoId);
     var routeInfoEl = document.getElementById(opts.routeInfoId);
 
-  function updateInfo(text) {
+    function updateInfo(text) {
     if (toolInfo) toolInfo.textContent = text;
   }
 
@@ -335,8 +335,8 @@ function initOrderMap(opts) {
     getRouteInfo: function() {
       return { distance: routeDistance, duration: routeDuration };
     }
-  };
-}
+  }; // 闭合 initMapWithPlugins
+} // 闭合 AMap.plugin 回调
 
 // 路线展示地图（订单详情用）
 function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) {

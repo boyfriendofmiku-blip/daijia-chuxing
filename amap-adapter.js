@@ -54,7 +54,8 @@ function initOrderMap(opts) {
       map: map,
       pageSize: 8,
       pageIndex: 1,
-      city: '全国'
+      city: '',
+      type: ''
     });
 
     var toolInfo = document.getElementById(opts.toolInfoId);
@@ -242,7 +243,10 @@ function initOrderMap(opts) {
         return;
       }
       searchTimer = setTimeout(function() {
+        console.log('[AMap] 搜索关键词:', keyword);
         placeSearch.search(keyword, function(status, result) {
+          console.log('[AMap] 搜索结果状态:', status);
+          console.log('[AMap] 搜索结果:', JSON.stringify(result).substring(0, 500));
           if (status === 'complete' && result.poiList && result.poiList.pois && result.poiList.pois.length > 0) {
             var pois = result.poiList.pois;
             var html = pois.map(function(poi, idx) {

@@ -1217,16 +1217,17 @@ function renderCreateOrder() {
         '<div class="map-toolbar">' +
           '<button class="map-tool-btn" id="map-zoom-in-btn" title="放大">➕</button>' +
           '<button class="map-tool-btn" id="map-zoom-out-btn" title="缩小">➖</button>' +
-          '<button class="map-tool-btn" id="map-type-btn" title="切换地图类型">🗺️</button>' +
+          '<button class="map-tool-btn" id="map-type-btn" title="切换卫星图">🛰️</button>' +
           '<button class="map-tool-btn" id="map-locate-btn" title="定位">📍</button>' +
+          '<button class="map-tool-btn" id="map-traffic-btn" title="实时路况">🚦</button>' +
         '</div>' +
-        '<div class="map-tool-info" id="map-tool-info">点击地图选择位置</div>' +
+        '<div class="map-tool-info" id="map-tool-info">点击地图选位置 / 拖动标记</div>' +
         '<div id="route-info" class="route-info-panel" style="display:none"></div>' +
       '</div>' +
       '<div class="card">' +
-        '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-from" placeholder="请输入出发地址" /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
-        '<button class="swap-btn" id="swap-locations-btn" title="交换起终点">⇅</button>' +
-        '<div class="form-group"><label>🔴 目的地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-to" placeholder="请输入目的地址" /><input type="hidden" id="order-to-lat" /><input type="hidden" id="order-to-lng" /></div>' +
+        '<div class="form-group"><label>🟢 出发地</label><input class="form-control" id="order-from" placeholder="点击地图选择或搜索设置" /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
+        '<button class="swap-btn" id="swap-locations-btn" title="交换起终点">⇅ 交换</button>' +
+        '<div class="form-group"><label>🔴 目的地</label><input class="form-control" id="order-to" placeholder="点击地图选择或搜索设置" /><input type="hidden" id="order-to-lat" /><input type="hidden" id="order-to-lng" /></div>' +
         '<div class="form-group"><label>📝 备注（可选）</label><input class="form-control" id="order-note" placeholder="例：喝了点酒，车停在地下车库B1" /></div>' +
       '</div>' +
       '<div id="price-estimate-box" style="display:none" class="price-estimate"><div><div class="price-label">预估费用</div><div style="font-size:12px;opacity:0.8;margin-top:2px">实际费用以完成订单为准</div></div><div class="price-value" id="price-display">¥0</div></div>' +
@@ -1977,7 +1978,8 @@ function bindEvents() {
         locateBtnId: 'map-locate-btn', toolInfoId: 'map-tool-info',
         routeInfoId: 'route-info',
         zoomInBtnId: 'map-zoom-in-btn', zoomOutBtnId: 'map-zoom-out-btn',
-        typeBtnId: 'map-type-btn', swapBtnId: 'swap-locations-btn'
+        typeBtnId: 'map-type-btn', swapBtnId: 'swap-locations-btn',
+        trafficBtnId: 'map-traffic-btn'
       });
     }
     var drvMapEl = document.getElementById('drv-order-map');
@@ -1990,7 +1992,8 @@ function bindEvents() {
         locateBtnId: 'drv-map-locate-btn', toolInfoId: 'drv-map-tool-info',
         routeInfoId: 'drv-route-info',
         zoomInBtnId: 'drv-map-zoom-in-btn', zoomOutBtnId: 'drv-map-zoom-out-btn',
-        typeBtnId: 'drv-map-type-btn', swapBtnId: 'drv-swap-locations-btn'
+        typeBtnId: 'drv-map-type-btn', swapBtnId: 'drv-swap-locations-btn',
+        trafficBtnId: 'drv-map-traffic-btn'
       });
     }
   }

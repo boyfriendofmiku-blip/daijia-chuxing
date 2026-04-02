@@ -85,7 +85,24 @@ function initOrderMap(opts) {
         }
       });
     }
-    
+
+    // 实时路况切换按钮
+    var trafficBtn = document.getElementById(opts.trafficBtnId);
+    var isTrafficOn = true;
+    if (trafficBtn) {
+      trafficBtn.classList.add('active');
+      trafficBtn.addEventListener('click', function() {
+        isTrafficOn = !isTrafficOn;
+        if (isTrafficOn) {
+          map.setTrafficOn();
+          trafficBtn.classList.add('active');
+        } else {
+          map.setTrafficOff();
+          trafficBtn.classList.remove('active');
+        }
+      });
+    }
+
     // 交换起终点按钮
     var swapBtn = document.getElementById(opts.swapBtnId);
     if (swapBtn) {

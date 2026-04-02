@@ -920,13 +920,31 @@ function estimatePrice(from, to) {
 
   // 尝试获取路线规划的时间估算
   let durationMinutes = 30; // 默认30分钟
+  let duration = 0;
 
-  // 从地图获取预估时间
+  // 方式1：从 window.__orderMap 获取
   if (window.__orderMap && window.__orderMap._getRouteInfo) {
     const routeInfo = window.__orderMap._getRouteInfo();
     if (routeInfo && routeInfo.duration) {
-      durationMinutes = Math.ceil(routeInfo.duration / 60); // 秒转分钟
+      duration = routeInfo.duration;
+      durationMinutes = Math.ceil(duration / 60);
+      console.log('[estimatePrice] 从__orderMap获取时长:', duration, '秒 = ', durationMinutes, '分钟');
     }
+  }
+
+  // 方式2：从 DOM 缓存获取（备选方案）
+  if (duration === 0) {
+    var routeInfoEl = document.getElementById('route-info');
+    if (routeInfoEl && routeInfoEl._cachedRouteInfo && routeInfoEl._cachedRouteInfo.duration) {
+      duration = routeInfoEl._cachedRouteInfo.duration;
+      durationMinutes = Math.ceil(duration / 60);
+      console.log('[estimatePrice] 从DOM缓存获取时长:', duration, '秒 = ', durationMinutes, '分钟');
+    }
+  }
+
+  // 如果还是0，说明没有路线规划，使用默认30分钟
+  if (durationMinutes === 30 && duration === 0) {
+    console.log('[estimatePrice] 未获取到路线时长，使用默认30分钟');
   }
 
   // 计算总价
@@ -939,6 +957,7 @@ function estimatePrice(from, to) {
     totalPrice = basePrice + extraPeriods * 20;
   }
 
+  console.log('[estimatePrice] 结算：', basePrice, '元起步 + 超时费 = ', totalPrice, '元 (时长:', durationMinutes, '分钟)');
   return totalPrice;
 }
 

@@ -9,7 +9,7 @@ function initOrderMap(opts) {
   var mapDiv = document.getElementById(opts.mapDivId);
   if (!mapDiv) {
     console.warn('[AMap] mapDiv未找到:', opts.mapDivId);
-    return;
+    return createFallbackMap(opts);
   }
   
   // 检查高德地图 API
@@ -17,7 +17,27 @@ function initOrderMap(opts) {
     console.warn('[AMap] 高德地图API未加载');
     var toolInfo = document.getElementById(opts.toolInfoId);
     if (toolInfo) toolInfo.textContent = '地图加载中...';
-    return;
+    return createFallbackMap(opts);
+  }
+  
+  // 创建备用地图对象（用于获取路线信息）
+  function createFallbackMap(opts) {
+    return {
+      _getRouteInfo: function() {
+        // 尝试从DOM元素获取路线信息
+        var routeInfoEl = document.getElementById(opts.routeInfoId);
+        if (routeInfoEl && routeInfoEl._cachedRouteInfo) {
+          return routeInfoEl._cachedRouteInfo;
+        }
+        return { distance: 0, duration: 0 };
+      },
+      _cacheRouteInfo: function(info) {
+        var routeInfoEl = document.getElementById(opts.routeInfoId);
+        if (routeInfoEl) {
+          routeInfoEl._cachedRouteInfo = info;
+        }
+      }
+    };
   }
   
   console.log('[AMap] 开始初始化地图');
@@ -188,6 +208,11 @@ function initOrderMap(opts) {
     routeDuration = parseFloat(duration) || 0;
 
     console.log('[AMap] updateRouteInfo - 距离:', routeDistance, '时间:', routeDuration);
+
+    // 缓存到DOM元素，方便estimatePrice获取
+    if (routeInfoEl) {
+      routeInfoEl._cachedRouteInfo = { distance: routeDistance, duration: routeDuration };
+    }
 
     if (!routeInfoEl) return;
 

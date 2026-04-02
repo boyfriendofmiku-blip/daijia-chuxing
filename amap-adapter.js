@@ -335,8 +335,10 @@ function initOrderMap(opts) {
     getRouteInfo: function() {
       return { distance: routeDistance, duration: routeDuration };
     }
-  }; // 闭合 initMapWithPlugins
-} // 闭合 AMap.plugin 回调
+  }; // 闭合 return 对象
+  } // 闭合 initMapWithPlugins 函数
+
+} // 闭合 initOrderMap 函数
 
 // 路线展示地图（订单详情用）
 function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) {

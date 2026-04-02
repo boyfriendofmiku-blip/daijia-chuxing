@@ -23,7 +23,12 @@ function initOrderMap(opts) {
   console.log('[AMap] 开始初始化地图');
   
   // 需要异步加载的插件
-  AMap.plugin(['AMap.Geocoder', 'AMap.Driving', 'AMap.PlaceSearch', 'AMap.Geolocation'], function() {
+  AMap.plugin([
+    'AMap.PlaceSearch', 
+    'AMap.Geocoder', 
+    'AMap.Driving', 
+    'AMap.Geolocation'
+  ], function() {
     initMapWithPlugins(opts);
   });
   

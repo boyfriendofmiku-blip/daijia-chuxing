@@ -183,12 +183,17 @@ function initOrderMap(opts) {
   }
 
   function updateRouteInfo(distance, duration) {
-    routeDistance = distance || 0;
-    routeDuration = duration || 0;
+    // 确保是有效数字
+    routeDistance = parseFloat(distance) || 0;
+    routeDuration = parseFloat(duration) || 0;
+
+    console.log('[AMap] updateRouteInfo - 距离:', routeDistance, '时间:', routeDuration);
+
     if (!routeInfoEl) return;
-    if (distance > 0) {
-      var distKm = distance >= 1000 ? (distance / 1000).toFixed(1) + ' km' : distance + ' m';
-      var durMin = Math.ceil(duration / 60);
+
+    if (routeDistance > 0) {
+      var distKm = routeDistance >= 1000 ? (routeDistance / 1000).toFixed(1) + ' km' : routeDistance + ' m';
+      var durMin = Math.ceil(routeDuration / 60);
       var durText = durMin >= 60 ? Math.floor(durMin / 60) + '小时' + (durMin % 60) + '分钟' : durMin + '分钟';
       routeInfoEl.innerHTML = '<div class="route-info-row"><span class="route-info-icon">🚗</span><span class="route-info-label">预估距离</span><span class="route-info-value">' + distKm + '</span></div>' +
         '<div class="route-info-row"><span class="route-info-icon">⏱️</span><span class="route-info-label">预计时间</span><span class="route-info-value">' + durText + '</span></div>';
@@ -219,14 +224,51 @@ function initOrderMap(opts) {
     var fromPos = [parseFloat(fg.value), parseFloat(fl.value)];
     var toPos = [parseFloat(tg.value), parseFloat(tl.value)];
 
+    console.log('[AMap] 规划路线:', fromPos, '->', toPos);
+
     driving.search(fromPos, toPos, function(status, result) {
+      console.log('[AMap] 路线结果状态:', status, result);
+
       if (status === 'complete' && result.routes && result.routes.length > 0) {
         var route = result.routes[0];
-        updateRouteInfo(route.distance, route.duration);
+        console.log('[AMap] 路线数据:', route);
 
-        // 绘制路线
-        var path = route.path;
+        // v2.0 API 距离和时间可能在不同的位置
+        var distance = route.distance || 0;
+        var duration = route.time || route.duration || 0;
+
+        // 如果还是没有，尝试从 steps 中计算
+        if (!distance && route.steps) {
+          distance = route.steps.reduce(function(sum, step) {
+            return sum + (step.distance || 0);
+          }, 0);
+        }
+        if (!duration && route.steps) {
+          duration = route.steps.reduce(function(sum, step) {
+            return sum + (step.time || 0);
+          }, 0);
+        }
+
+        console.log('[AMap] 距离:', distance, '时间:', duration);
+        updateRouteInfo(distance, duration);
+
+        // 绘制路线 - 尝试多种方式
+        var path = null;
+        if (route.path && route.path.length > 0) {
+          path = route.path;
+        } else if (route.steps) {
+          // 从 steps 构建路径
+          var points = [];
+          route.steps.forEach(function(step) {
+            if (step.path) {
+              points = points.concat(step.path);
+            }
+          });
+          if (points.length > 0) path = points;
+        }
+
         if (path && path.length > 0) {
+          console.log('[AMap] 绘制路线，点数:', path.length);
           routeLine = new AMap.Polyline({
             path: path,
             strokeColor: '#3777FF',
@@ -236,14 +278,18 @@ function initOrderMap(opts) {
             lineJoin: 'round'
           });
           routeLine.setMap(map);
+          map.setFitView();
+          updateInfo('✅ 路线规划完成');
+        } else {
+          updateInfo('⚠️ 路线已规划，绘制中...');
+          // 强制调整视野到起终点
+          if (fromMarker && toMarker) {
+            map.setFitView([fromMarker, toMarker]);
+          }
         }
-
-        // 调整视野
-        map.setFitView();
-
-        updateInfo('✅ 路线规划完成');
       } else {
-        updateInfo('⚠️ 未找到合适路线，已标记起终点');
+        console.log('[AMap] 路线规划失败:', result);
+        updateInfo('⚠️ 未找到合适路线');
       }
     });
   }

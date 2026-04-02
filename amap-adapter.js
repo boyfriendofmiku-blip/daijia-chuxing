@@ -46,14 +46,109 @@ function initOrderMap(opts) {
     var map = new AMap.Map(mapDiv, {
       zoom: 13,
       center: [113.264, 23.129],
-      mapStyle: 'amap://styles/light'
+      mapStyle: 'amap://styles/light',
+      showLabel: true,
+      viewMode: '2D'
     });
+    
+    // 添加工具栏按钮事件
+    // 放大按钮
+    var zoomInBtn = document.getElementById(opts.zoomInBtnId);
+    if (zoomInBtn) {
+      zoomInBtn.addEventListener('click', function() {
+        map.zoomIn();
+      });
+    }
+    
+    // 缩小按钮
+    var zoomOutBtn = document.getElementById(opts.zoomOutBtnId);
+    if (zoomOutBtn) {
+      zoomOutBtn.addEventListener('click', function() {
+        map.zoomOut();
+      });
+    }
+    
+    // 地图类型切换按钮
+    var typeBtn = document.getElementById(opts.typeBtnId);
+    var isSatellite = false;
+    if (typeBtn) {
+      typeBtn.addEventListener('click', function() {
+        isSatellite = !isSatellite;
+        if (isSatellite) {
+          map.setMapStyle('amap://styles/satellite');
+          typeBtn.textContent = '🗺️';
+          typeBtn.classList.add('active');
+        } else {
+          map.setMapStyle('amap://styles/light');
+          typeBtn.textContent = '🛰️';
+          typeBtn.classList.remove('active');
+        }
+      });
+    }
+    
+    // 交换起终点按钮
+    var swapBtn = document.getElementById(opts.swapBtnId);
+    if (swapBtn) {
+      swapBtn.addEventListener('click', function() {
+        var fromInput = document.getElementById(opts.fromInputId);
+        var toInput = document.getElementById(opts.toInputId);
+        var fromLat = document.getElementById(opts.fromLatId);
+        var fromLng = document.getElementById(opts.fromLngId);
+        var toLat = document.getElementById(opts.toLatId);
+        var toLng = document.getElementById(opts.toLngId);
+        
+        if (fromInput && toInput) {
+          // 交换文本值
+          var tempText = fromInput.value;
+          fromInput.value = toInput.value;
+          toInput.value = tempText;
+          
+          // 交换经纬度
+          if (fromLat && fromLng && toLat && toLng) {
+            var tempLat = fromLat.value;
+            var tempLng = fromLng.value;
+            fromLat.value = toLat.value;
+            fromLng.value = toLng.value;
+            toLat.value = tempLat;
+            toLng.value = tempLng;
+          }
+          
+          // 交换标记
+          var tempMarker = fromMarker;
+          fromMarker = toMarker;
+          toMarker = tempMarker;
+          
+          // 更新标记并重新规划路线
+          if (fromMarker) {
+            fromMarker.setIcon(new AMap.Icon({
+              size: new AMap.Size(32, 32),
+              image: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSIxNCIgZmlsbD0iIzI3QUU2MCIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iNiIgcj0iNCIgZmlsbD0id2hpdGUiLz48dGV4dCB4PSIxNiIgeT0iMTgiIHRmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMiIgZm9ybWF0PSJ0cmltJ3MgYXV0byIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGRhdGEtdW5pY29kZT0i7Y+R5Yiw7aSw7Iao5pGzIj7tl5HiiaM+PXRleHQ+PjwvZz48L3N2Zz4=',
+              imageSize: new AMap.Size(32, 32)
+            }));
+          }
+          if (toMarker) {
+            toMarker.setIcon(new AMap.Icon({
+              size: new AMap.Size(32, 32),
+              image: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSIxNCIgZmlsbD0iI0U3NDQzQyIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iNiIgcj0iNCIgZmlsbD0id2hpdGUiLz48dGV4dCB4PSIxNiIgeT0iMTgiIHRmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMiIgZm9ybWF0PSJ0cmltJ3MgYXV0byIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGRhdGEtdW5pY29kZT0i7Y+R5Yiw7Yiw7Ziq5pGzIj7tl5HiiaM+PXRleHQ+PjwvZz48L3N2Zz4=',
+              imageSize: new AMap.Size(32, 32)
+            }));
+          }
+          
+          // 重新规划路线
+          planRoute();
+          
+          showToast('已交换起终点 🔄', 'success');
+        }
+      });
+    }
 
     // 使用插件方式创建的地理编码服务
     var geocoder = new AMap.Geocoder({ city: '全国', radius: 1000 });
     var driving = new AMap.Driving({
       policy: AMap.DrivingPolicy.LEAST_TIME,
-      city: '全国'
+      city: '全国',
+      showTraffic: true,  // 显示实时路况
+      extensions: 'all'   // 返回完整信息
     });
     var placeSearch = new AMap.PlaceSearch({
       map: map,

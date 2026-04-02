@@ -1214,12 +1214,18 @@ function renderCreateOrder() {
         '<div id="order-map" class="map-canvas"></div>' +
         '<div class="map-search-bar"><div class="map-search-input-wrap"><span class="map-search-icon">🔍</span><input class="map-search-input" id="map-search-input" placeholder="搜索地点..." /></div></div>' +
         '<div class="map-search-results" id="map-search-results" style="display:none"></div>' +
-        '<div class="map-toolbar"><button class="map-tool-btn" id="map-locate-btn" title="定位当前位置">📍</button><div class="map-tool-info" id="map-tool-info">点击地图选择位置</div></div>' +
+        '<div class="map-toolbar">' +
+          '<button class="map-tool-btn" id="map-zoom-in-btn" title="放大">➕</button>' +
+          '<button class="map-tool-btn" id="map-zoom-out-btn" title="缩小">➖</button>' +
+          '<button class="map-tool-btn" id="map-type-btn" title="切换地图类型">🗺️</button>' +
+          '<button class="map-tool-btn" id="map-locate-btn" title="定位">📍</button>' +
+        '</div>' +
+        '<div class="map-tool-info" id="map-tool-info">点击地图选择位置</div>' +
         '<div id="route-info" class="route-info-panel" style="display:none"></div>' +
       '</div>' +
       '<div class="card">' +
         '<div class="form-group"><label>🟢 出发地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-from" placeholder="请输入出发地址" /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
-        '<div style="text-align:center;color:var(--text-muted);font-size:18px;padding:2px 0">⇅</div>' +
+        '<button class="swap-btn" id="swap-locations-btn" title="交换起终点">⇅</button>' +
         '<div class="form-group"><label>🔴 目的地 <span style="color:var(--text-muted);font-size:12px;font-weight:400">（点击地图或搜索设置）</span></label><input class="form-control" id="order-to" placeholder="请输入目的地址" /><input type="hidden" id="order-to-lat" /><input type="hidden" id="order-to-lng" /></div>' +
         '<div class="form-group"><label>📝 备注（可选）</label><input class="form-control" id="order-note" placeholder="例：喝了点酒，车停在地下车库B1" /></div>' +
       '</div>' +
@@ -1547,7 +1553,13 @@ function renderDriverCreateOrder() {
         '<div id="drv-order-map" class="map-canvas"></div>' +
         '<div class="map-search-bar"><div class="map-search-input-wrap"><span class="map-search-icon">🔍</span><input class="map-search-input" id="drv-map-search-input" placeholder="搜索地点..." /></div></div>' +
         '<div class="map-search-results" id="drv-map-search-results" style="display:none"></div>' +
-        '<div class="map-toolbar"><button class="map-tool-btn" id="drv-map-locate-btn" title="定位当前位置">📍</button><div class="map-tool-info" id="drv-map-tool-info">点击地图选择位置</div></div>' +
+        '<div class="map-toolbar">' +
+          '<button class="map-tool-btn" id="drv-map-zoom-in-btn" title="放大">➕</button>' +
+          '<button class="map-tool-btn" id="drv-map-zoom-out-btn" title="缩小">➖</button>' +
+          '<button class="map-tool-btn" id="drv-map-type-btn" title="切换地图类型">🗺️</button>' +
+          '<button class="map-tool-btn" id="drv-map-locate-btn" title="定位">📍</button>' +
+        '</div>' +
+        '<div class="map-tool-info" id="drv-map-tool-info">点击地图选择位置</div>' +
         '<div id="drv-route-info" class="route-info-panel" style="display:none"></div>' +
       '</div>' +
       '<div class="card">' +
@@ -1963,7 +1975,9 @@ function bindEvents() {
         toInputId: 'order-to', toLatId: 'order-to-lat', toLngId: 'order-to-lng',
         searchInputId: 'map-search-input', searchResultsId: 'map-search-results',
         locateBtnId: 'map-locate-btn', toolInfoId: 'map-tool-info',
-        routeInfoId: 'route-info'
+        routeInfoId: 'route-info',
+        zoomInBtnId: 'map-zoom-in-btn', zoomOutBtnId: 'map-zoom-out-btn',
+        typeBtnId: 'map-type-btn', swapBtnId: 'swap-locations-btn'
       });
     }
     var drvMapEl = document.getElementById('drv-order-map');
@@ -1974,7 +1988,9 @@ function bindEvents() {
         toInputId: 'drv-co-to', toLatId: 'drv-co-to-lat', toLngId: 'drv-co-to-lng',
         searchInputId: 'drv-map-search-input', searchResultsId: 'drv-map-search-results',
         locateBtnId: 'drv-map-locate-btn', toolInfoId: 'drv-map-tool-info',
-        routeInfoId: 'drv-route-info'
+        routeInfoId: 'drv-route-info',
+        zoomInBtnId: 'drv-map-zoom-in-btn', zoomOutBtnId: 'drv-map-zoom-out-btn',
+        typeBtnId: 'drv-map-type-btn', swapBtnId: 'drv-swap-locations-btn'
       });
     }
   }

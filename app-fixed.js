@@ -903,38 +903,65 @@ function showToast(msg, type) {
   setTimeout(function() { t.remove(); }, 2900);
 }
 
+/**
+ * 许昌市区代驾计费规则：
+ * - 白天（08:00-20:00）：起步价18元，30分钟内18元
+ * - 夜间（20:00-08:00）：起步价28元，30分钟内28元
+ * - 超时：每30分钟加收20元
+ * 费用与路线长度无关，只与时间和时长有关
+ */
 function estimatePrice(from, to) {
-  const base = 30;
-  let distance = 0;
-  
-  // 尝试从地图获取实际距离
+  // 判断当前时段
+  const hour = new Date().getHours();
+  const isNightTime = hour >= 20 || hour < 8; // 晚上8点后为夜间
+
+  // 基础起步价
+  const basePrice = isNightTime ? 28 : 18;
+
+  // 尝试获取路线规划的时间估算
+  let durationMinutes = 30; // 默认30分钟
+
+  // 从地图获取预估时间
   if (window.__orderMap && window.__orderMap._getRouteInfo) {
     const routeInfo = window.__orderMap._getRouteInfo();
-    distance = routeInfo.distance || 0;
+    if (routeInfo && routeInfo.duration) {
+      durationMinutes = Math.ceil(routeInfo.duration / 60); // 秒转分钟
+    }
   }
-  
-  // 如果没有地图距离，使用默认估算
-  if (distance <= 0) {
-    distance = (from.length + to.length) % 20 + 5;
+
+  // 计算总价
+  let totalPrice = basePrice;
+
+  // 超出30分钟，每30分钟加收20元
+  if (durationMinutes > 30) {
+    const extraMinutes = durationMinutes - 30;
+    const extraPeriods = Math.ceil(extraMinutes / 30); // 向上取整
+    totalPrice = basePrice + extraPeriods * 20;
   }
-  
-  // 转换为公里
-  const km = distance / 1000;
-  let price = base + km * 5; // 5元/公里
-  
-  // 夜间服务费
-  const hour = new Date().getHours();
-  const isNight = hour >= 22 || hour < 6;
-  if (isNight) price *= 1.3;
-  
-  // 最低价格
-  price = Math.max(price, 40);
-  
-  return Math.round(price);
+
+  return totalPrice;
 }
+
+/**
+ * 获取费用说明文本
+ */
+function getPriceDescription() {
+  const hour = new Date().getHours();
+  const isNightTime = hour >= 20 || hour < 8;
+
+  let desc = '';
+  if (isNightTime) {
+    desc = '夜间（20:00-08:00）：起步价28元，超30分钟每30分钟+20元';
+  } else {
+    desc = '白天（08:00-20:00）：起步价18元，超30分钟每30分钟+20元';
+  }
+
+  return desc;
+}
+
 function isNightTime() {
   const hour = new Date().getHours();
-  return hour >= 22 || hour < 6;
+  return hour >= 20 || hour < 8;
 }
 
 // ============ 通知模块（本地localStorage存储） ============
@@ -1230,7 +1257,7 @@ function renderCreateOrder() {
         '<div class="form-group"><label>🔴 目的地</label><input class="form-control" id="order-to" placeholder="点击地图选择或搜索设置" /><input type="hidden" id="order-to-lat" /><input type="hidden" id="order-to-lng" /></div>' +
         '<div class="form-group"><label>📝 备注（可选）</label><input class="form-control" id="order-note" placeholder="例：喝了点酒，车停在地下车库B1" /></div>' +
       '</div>' +
-      '<div id="price-estimate-box" style="display:none" class="price-estimate"><div><div class="price-label">预估费用</div><div style="font-size:12px;opacity:0.8;margin-top:2px">实际费用以完成订单为准</div></div><div class="price-value" id="price-display">¥0</div></div>' +
+      '<div id="price-estimate-box" style="display:none" class="price-estimate"><div><div class="price-label">预估费用</div><div style="font-size:12px;opacity:0.8;margin-top:2px" id="price-rule-desc">起步价+超时费</div></div><div class="price-value" id="price-display">¥0</div></div>' +
       '<button class="btn btn-primary btn-block" id="estimate-btn" style="margin-bottom:12px">估算费用</button>' +
       '<button class="btn btn-success btn-block" id="submit-order-btn" disabled>🚗 立即下单</button>' +
     '</div>' +
@@ -2031,9 +2058,15 @@ function bindEvents() {
 
       var box     = document.getElementById('price-estimate-box');
       var display = document.getElementById('price-display');
+      var ruleDesc = document.getElementById('price-rule-desc');
       if (box && display) {
-        var nightNote = isNightTime() ? '<div style="font-size:11px;color:#E67E22;margin-top:4px">🌙 含夜间服务费（+30%）</div>' : '';
-        display.innerHTML = '¥' + price + nightNote;
+        var periodNote = isNightTime()
+          ? '<div style="font-size:11px;color:#9b59b6;margin-top:4px">🌙 夜间时段（20:00-08:00）起步价28元</div>'
+          : '<div style="font-size:11px;color:#27ae60;margin-top:4px">☀️ 白天时段（08:00-20:00）起步价18元</div>';
+        display.innerHTML = '¥' + price + periodNote;
+        if (ruleDesc) {
+          ruleDesc.textContent = '超30分钟每30分钟+20元';
+        }
         box.style.display = 'flex';
       }
 

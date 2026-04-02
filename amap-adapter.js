@@ -500,7 +500,7 @@ function initOrderMap(opts) {
   updateInfo('📍 点击地图选择出发地');
 
   return {
-    getRouteInfo: function() {
+    _getRouteInfo: function() {
       return { distance: routeDistance, duration: routeDuration };
     }
   }; // 闭合 return 对象

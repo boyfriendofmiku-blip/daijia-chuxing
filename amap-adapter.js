@@ -51,6 +51,7 @@ function initOrderMap(opts) {
       city: '全国'
     });
     var placeSearch = new AMap.PlaceSearch({
+      map: map,
       pageSize: 8,
       pageIndex: 1,
       city: '全国'

@@ -100,6 +100,8 @@ async function fetchOrders() {
     price: o.price ? String(o.price) : '0',
     rating: o.rating,
     review: o.review,
+    driverLat: o.driver_lat || null,
+    driverLng: o.driver_lng || null,
     createdAt: o.created_at ? new Date(o.created_at).toLocaleString('zh-CN', { hour12: false }) : '',
     acceptedAt: o.accepted_at ? new Date(o.accepted_at).toLocaleString('zh-CN', { hour12: false }) : null,
     completedAt: o.completed_at ? new Date(o.completed_at).toLocaleString('zh-CN', { hour12: false }) : null,
@@ -305,6 +307,9 @@ const DB = {
     if (updates.rating) sbData.rating = updates.rating;
     if (updates.review) sbData.review = updates.review;
     if (updates.price) sbData.price = parseFloat(updates.price);
+    // 司机实时位置
+    if (updates.driverLat !== undefined) sbData.driver_lat = parseFloat(updates.driverLat);
+    if (updates.driverLng !== undefined) sbData.driver_lng = parseFloat(updates.driverLng);
 
     const { data, error } = await sb()
       .from('orders')
@@ -353,6 +358,8 @@ const DB = {
       price: String(data.price),
       rating: data.rating,
       review: data.review,
+      driverLat: data.driver_lat || null,
+      driverLng: data.driver_lng || null,
       createdAt: data.created_at ? new Date(data.created_at).toLocaleString('zh-CN', { hour12: false }) : '',
       acceptedAt: data.accepted_at ? new Date(data.accepted_at).toLocaleString('zh-CN', { hour12: false }) : null,
       completedAt: data.completed_at ? new Date(data.completed_at).toLocaleString('zh-CN', { hour12: false }) : null,

@@ -1012,6 +1012,9 @@ function loadingHtml() {
 
 // ============ 路由（异步） ============
 function navigate(page, params) {
+  // 切页时清理实时追踪和到达检测
+  stopLiveTracking();
+  stopArrivalCheck();
   State.currentPage = page;
   State.pageParams = params || {};
   render();
@@ -1355,17 +1358,35 @@ async function renderOrderDetail(orderId) {
 
   // 路线地图（如果有经纬度）
   var routeMapHtml = '';
+  // ongoing 状态显示实时追踪地图；其他状态显示普通路线地图
+  const isOngoing = order.status === 'ongoing' || order.status === 'accepted';
   if (order.fromLat && order.fromLng && order.toLat && order.toLng) {
-    routeMapHtml = '<div id="detail-route-map-wrapper" style="position:relative;margin-bottom:12px">' +
-      '<div id="detail-route-map" class="detail-route-map"></div>' +
-      '<button class="map-expand-btn" data-action="expand-map" data-map-id="detail-route-map">⛶</button>' +
-      '</div>';
+    if (isOngoing) {
+      // 实时追踪地图（司机位置 + 导航）
+      routeMapHtml = '<div id="detail-route-map-wrapper" style="position:relative;margin-bottom:12px">' +
+        '<div id="detail-live-map" class="detail-route-map"></div>' +
+        '<button class="map-expand-btn" data-action="expand-map" data-map-id="detail-live-map">⛶</button>' +
+        // 导航按钮（司机视角）
+        (isDriver ? '<button id="nav-to-dest-btn" class="map-nav-btn" data-action="open-navigation" data-order-id="' + order.id + '" title="导航到目的地">🧭 导航</button>' : '') +
+        '</div>' +
+        // 实时状态栏
+        '<div id="live-status-bar" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:10px;margin-bottom:10px;color:#fff;font-size:13px">' +
+          '<span style="width:8px;height:8px;border-radius:50%;background:#00f5a0;animation:pulse-dot 1.5s infinite;flex-shrink:0"></span>' +
+          '<span id="live-status-text">正在获取司机位置...</span>' +
+          '<span id="live-dist-text" style="margin-left:auto;font-size:12px;color:#a0c4ff"></span>' +
+        '</div>';
+    } else {
+      routeMapHtml = '<div id="detail-route-map-wrapper" style="position:relative;margin-bottom:12px">' +
+        '<div id="detail-route-map" class="detail-route-map"></div>' +
+        '<button class="map-expand-btn" data-action="expand-map" data-map-id="detail-route-map">⛶</button>' +
+        '</div>';
+    }
     // 距离信息
     var distText = '';
     if (order.distance && order.distance > 0) {
       distText = order.distance >= 1000 ? (order.distance / 1000).toFixed(1) + ' km' : order.distance + ' m';
     }
-    if (distText) {
+    if (distText && !isOngoing) {
       routeMapHtml += '<div style="font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:8px">📏 预估距离：' + distText + '</div>';
     }
   }
@@ -1375,12 +1396,17 @@ async function renderOrderDetail(orderId) {
   if (isUser && order.status === 'pending') {
     actionButtons = '<button class="btn btn-danger btn-block" data-action="cancel-order" data-order-id="' + order.id + '">取消订单</button>';
   }
+  // 乘客主动结束订单（代驾中）
+  if (isUser && order.status === 'ongoing') {
+    actionButtons = '<button class="btn btn-warning btn-block" data-action="user-complete-order" data-order-id="' + order.id + '" style="background:#e67e22;border-color:#e67e22">🏁 确认到达，结束代驾</button>';
+  }
   if (isDriver && order.driverId === State.currentUser.id) {
     if (order.status === 'accepted') {
       actionButtons = '<button class="btn btn-success btn-block" data-action="start-order" data-order-id="' + order.id + '">🚗 开始代驾</button>';
     }
     if (order.status === 'ongoing') {
-      actionButtons = '<button class="btn btn-primary btn-block" data-action="complete-order" data-order-id="' + order.id + '">✅ 完成代驾</button>';
+      actionButtons = '<button class="btn btn-primary btn-block" data-action="complete-order" data-order-id="' + order.id + '" id="complete-order-btn">✅ 完成代驾</button>' +
+        '<div id="arrive-check-msg" style="display:none;text-align:center;font-size:12px;color:var(--text-muted);margin-top:8px">📍 正在检测到达状态...</div>';
     }
   }
 
@@ -2312,10 +2338,36 @@ async function handleAction(action, dataset) {
       break;
     }
 
-    // 完成代驾
+    // 完成代驾（司机端 - 需靠近目的地500m内）
     case 'complete-order': {
       var orderId3 = dataset.orderId;
+      var order3pre = await DB.getOrderById(orderId3);
+
+      // 如果有目的地坐标，检查距离
+      if (order3pre && order3pre.toLat && order3pre.toLng) {
+        if (!_driverCurrentPos) {
+          // 尝试实时获取一次
+          await new Promise(function(resolve) {
+            if (!navigator.geolocation) { resolve(); return; }
+            navigator.geolocation.getCurrentPosition(function(pos) {
+              _driverCurrentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+              resolve();
+            }, function() { resolve(); }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+          });
+        }
+        if (_driverCurrentPos) {
+          var dist3 = _calcDistance(_driverCurrentPos.lat, _driverCurrentPos.lng, parseFloat(order3pre.toLat), parseFloat(order3pre.toLng));
+          if (dist3 > 500) {
+            var distStr3 = dist3 >= 1000 ? (dist3 / 1000).toFixed(1) + ' km' : Math.round(dist3) + ' m';
+            showToast('距目的地 ' + distStr3 + '，请到达目的地附近（500m内）再完成代驾', 'error');
+            break;
+          }
+        }
+      }
+
       showToast('正在完成...', '');
+      stopLiveTracking();
+      stopArrivalCheck();
       var result3 = await DB.updateOrder(orderId3, { status: 'completed', completedAt: true });
       var order3 = await DB.getOrderById(orderId3);
       if (order3) {
@@ -2324,6 +2376,51 @@ async function handleAction(action, dataset) {
       }
       showToast('行程完成！感谢您的服务 ✅', 'success');
       navigate('order-detail', { orderId: orderId3 });
+      break;
+    }
+
+    // 乘客主动结束代驾（ongoing状态）
+    case 'user-complete-order': {
+      var orderId5 = dataset.orderId;
+      if (!confirm('确认您已到达目的地，结束本次代驾？\n\n完成后将进行结算。')) break;
+      showToast('正在结束代驾...', '');
+      stopLiveTracking();
+      var result5 = await DB.updateOrder(orderId5, { status: 'completed', completedAt: true });
+      var order5 = await DB.getOrderById(orderId5);
+      if (order5) {
+        if (order5.driverId) addNotification(order5.driverId, '乘客确认到达', '乘客已确认到达目的地，订单完成，收入 ' + (order5.price || '0') + ' 元。', 'payment');
+        addNotification(State.currentUser.id, '行程已完成', '您的代驾行程已完成，感谢使用！', 'payment');
+      }
+      showToast('行程已结束，感谢使用代驾服务 ✅', 'success');
+      navigate('order-detail', { orderId: orderId5 });
+      break;
+    }
+
+    // 打开导航（司机端）
+    case 'open-navigation': {
+      var navOrderId = dataset.orderId;
+      var navOrder = await DB.getOrderById(navOrderId);
+      if (!navOrder) { showToast('订单不存在', 'error'); break; }
+      // 优先用目的地坐标打开地图导航，退而使用地址搜索
+      var destLat = navOrder.toLat, destLng = navOrder.toLng;
+      var destName = encodeURIComponent(navOrder.to || '目的地');
+      var navUrl = '';
+      var ua = navigator.userAgent.toLowerCase();
+      if (destLat && destLng) {
+        if (/micromessenger|alipay/.test(ua)) {
+          // 微信/支付宝内：高德地图网页版
+          navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + destName + '&mode=car&callnative=1';
+        } else if (/android/.test(ua)) {
+          navUrl = 'intent://navigation?to=' + destLng + ',' + destLat + ',' + destName + '&callnative=1#Intent;scheme=amapuri;package=com.autonavi.minimap;end';
+        } else if (/iphone|ipad/.test(ua)) {
+          navUrl = 'iosamap://navi?sourceApplication=daijia&lat=' + destLat + '&lon=' + destLng + '&dev=0&style=0';
+        } else {
+          navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + destName + '&mode=car&callnative=1';
+        }
+      } else {
+        navUrl = 'https://uri.amap.com/search?keywords=' + destName;
+      }
+      window.open(navUrl, '_blank');
       break;
     }
 
@@ -2371,19 +2468,31 @@ async function initPageExtras() {
     });
   }
   
-  // 初始化订单详情页的路线地图
+  // 初始化订单详情页的路线地图 / 实时追踪地图
   if (State.currentPage === 'order-detail' && State.pageParams.orderId) {
     var order = await DB.getOrderById(State.pageParams.orderId);
     if (order && order.fromLat && order.fromLng && order.toLat && order.toLng) {
-      setTimeout(function() {
-        var m = initRouteDisplayMap('detail-route-map', order.fromLat, order.fromLng, order.toLat, order.toLng, {
-          showInfo: true,
-          onRouteReady: function(info) {
-            window.__detailRouteInfo = info;
-          }
-        });
-        if (m) window.__detailRouteMap = m;
-      }, 100);
+      var isActiveOrder = (order.status === 'ongoing' || order.status === 'accepted');
+      if (isActiveOrder) {
+        // 实时追踪地图
+        setTimeout(function() {
+          initLiveTrackMap(order);
+        }, 150);
+      } else {
+        setTimeout(function() {
+          var m = initRouteDisplayMap('detail-route-map', order.fromLat, order.fromLng, order.toLat, order.toLng, {
+            showInfo: true,
+            onRouteReady: function(info) {
+              window.__detailRouteInfo = info;
+            }
+          });
+          if (m) window.__detailRouteMap = m;
+        }, 100);
+      }
+    }
+    // 司机端 ongoing：启动到达检测
+    if (order && order.status === 'ongoing' && State.currentUser && State.currentUser.type === 'driver') {
+      setTimeout(function() { startArrivalCheck(order); }, 800);
     }
   }
   
@@ -2402,6 +2511,223 @@ async function initPageExtras() {
       }
     });
   }
+}
+
+// ============================================================
+//  实时追踪地图 - 司机位置实时展示
+// ============================================================
+var _liveTrackTimer = null;
+var _liveTrackMap = null;
+var _liveDriverMarker = null;
+
+function initLiveTrackMap(order) {
+  var mapDiv = document.getElementById('detail-live-map');
+  if (!mapDiv || typeof AMap === 'undefined') return;
+
+  // 创建地图，以起终点中间为中心
+  var centerLng = (parseFloat(order.fromLng) + parseFloat(order.toLng)) / 2;
+  var centerLat = (parseFloat(order.fromLat) + parseFloat(order.toLat)) / 2;
+  var map = new AMap.Map(mapDiv, {
+    zoom: 14,
+    center: [centerLng, centerLat],
+    mapStyle: 'amap://styles/normal'
+  });
+  _liveTrackMap = map;
+
+  // 目的地标记（红旗）
+  var toMarker = new AMap.Marker({
+    position: [parseFloat(order.toLng), parseFloat(order.toLat)],
+    content: '<div style="background:#E74C3C;color:#fff;padding:5px 10px;border-radius:20px;font-size:12px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🏁 目的地</div>',
+    offset: new AMap.Pixel(-30, -20)
+  });
+  toMarker.setMap(map);
+
+  // 出发地标记
+  var fromMarker = new AMap.Marker({
+    position: [parseFloat(order.fromLng), parseFloat(order.fromLat)],
+    content: '<div style="background:#27AE60;color:#fff;padding:5px 10px;border-radius:20px;font-size:12px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🟢 出发地</div>',
+    offset: new AMap.Pixel(-30, -20)
+  });
+  fromMarker.setMap(map);
+
+  // 初始化司机位置标记
+  _liveDriverMarker = new AMap.Marker({
+    position: [parseFloat(order.fromLng), parseFloat(order.fromLat)],
+    content: '<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:6px 12px;border-radius:20px;font-size:13px;white-space:nowrap;box-shadow:0 3px 12px rgba(102,126,234,0.6);font-weight:600">🚗 司机</div>',
+    offset: new AMap.Pixel(-25, -22)
+  });
+  _liveDriverMarker.setMap(map);
+
+  // 绘制路线
+  AMap.plugin('AMap.Driving', function() {
+    var policy = (AMap.DrivingPolicy && AMap.DrivingPolicy.LEAST_TIME) ? AMap.DrivingPolicy.LEAST_TIME : 0;
+    var driving = new AMap.Driving({ policy: policy, showTraffic: true });
+    driving.search(
+      [parseFloat(order.fromLng), parseFloat(order.fromLat)],
+      [parseFloat(order.toLng), parseFloat(order.toLat)],
+      function(status, result) {
+        if (status === 'complete' && result.routes && result.routes.length > 0) {
+          var route = result.routes[0];
+          var path = route.path;
+          if ((!path || path.length === 0) && route.steps) {
+            path = [];
+            route.steps.forEach(function(step) { if (step.path) path = path.concat(step.path); });
+          }
+          if (path && path.length > 0) {
+            new AMap.Polyline({
+              path: path,
+              strokeColor: '#764ba2',
+              strokeWeight: 5,
+              strokeStyle: 'solid',
+              strokeOpacity: 0.7
+            }).setMap(map);
+          }
+          map.setFitView();
+        }
+      }
+    );
+  });
+
+  // 存储订单数据
+  window.__liveTrackOrder = order;
+
+  // 开始位置追踪
+  _startLocationTracking(order, map);
+}
+
+function _startLocationTracking(order, map) {
+  if (_liveTrackTimer) clearInterval(_liveTrackTimer);
+
+  function updatePosition() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      var lat = pos.coords.latitude;
+      var lng = pos.coords.longitude;
+
+      if (State.currentUser && State.currentUser.type === 'driver') {
+        // 司机端：更新自身位置到地图，并缓存到 localStorage 供本地到达检测用
+        _driverCurrentPos = { lat: lat, lng: lng };
+        localStorage.setItem('dj_driver_pos_' + order.id, JSON.stringify({ lat: lat, lng: lng, ts: Date.now() }));
+        _updateDriverMarker(lat, lng, order, map);
+      } else {
+        // 乘客/客服端：尝试从 localStorage 读取司机最新位置（司机设备写入的）
+        var cached = null;
+        try { cached = JSON.parse(localStorage.getItem('dj_driver_pos_' + order.id) || 'null'); } catch(e) {}
+        if (cached && (Date.now() - cached.ts) < 30000) {
+          _updateDriverMarker(cached.lat, cached.lng, order, map);
+        } else {
+          var statusEl = document.getElementById('live-status-text');
+          if (statusEl) statusEl.textContent = '等待司机位置更新...';
+        }
+      }
+    }, function(err) {
+      var statusEl = document.getElementById('live-status-text');
+      if (statusEl) {
+        if (State.currentUser && State.currentUser.type === 'driver') {
+          statusEl.textContent = 'GPS未授权，无法追踪位置';
+        } else {
+          statusEl.textContent = '代驾服务中，请稍候';
+        }
+      }
+    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 5000 });
+  }
+
+  updatePosition();
+  _liveTrackTimer = setInterval(updatePosition, 8000);
+}
+
+function _updateDriverMarker(dLat, dLng, order, map) {
+  if (!_liveDriverMarker || !map) return;
+
+  _liveDriverMarker.setPosition([dLng, dLat]);
+
+  // 计算与目的地距离
+  var toLat = parseFloat(order.toLat), toLng = parseFloat(order.toLng);
+  var dist = _calcDistance(dLat, dLng, toLat, toLng);
+  var distStr = dist >= 1000 ? (dist / 1000).toFixed(1) + ' km' : Math.round(dist) + ' m';
+
+  var statusEl = document.getElementById('live-status-text');
+  var distEl = document.getElementById('live-dist-text');
+  if (statusEl) statusEl.textContent = '司机位置实时更新中';
+  if (distEl) distEl.textContent = '距目的地 ' + distStr;
+
+  // 地图中心跟随司机
+  map.setCenter([dLng, dLat]);
+}
+
+// 清除追踪定时器（页面切走时调用）
+function stopLiveTracking() {
+  if (_liveTrackTimer) { clearInterval(_liveTrackTimer); _liveTrackTimer = null; }
+  _liveTrackMap = null;
+  _liveDriverMarker = null;
+}
+
+// ============================================================
+//  到达检测 - 司机完成代驾前校验
+// ============================================================
+var _arrivalCheckTimer = null;
+var _driverCurrentPos = null; // 缓存司机当前位置
+
+function startArrivalCheck(order) {
+  if (!navigator.geolocation) return;
+
+  function checkArrival() {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      _driverCurrentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      var dist = _calcDistance(pos.coords.latitude, pos.coords.longitude, parseFloat(order.toLat), parseFloat(order.toLng));
+      var msgEl = document.getElementById('arrive-check-msg');
+      var btnEl = document.getElementById('complete-order-btn');
+      if (!msgEl || !btnEl) { stopArrivalCheck(); return; }
+
+      var distStr = dist >= 1000 ? (dist / 1000).toFixed(1) + ' km' : Math.round(dist) + ' m';
+
+      if (dist <= 500) {
+        // 已到达范围内
+        msgEl.innerHTML = '📍 距目的地 <strong>' + distStr + '</strong>，可以完成代驾 ✅';
+        msgEl.style.color = '#27AE60';
+        msgEl.style.display = 'block';
+        btnEl.disabled = false;
+        btnEl.style.opacity = '1';
+        stopArrivalCheck(); // 到达后停止检测
+      } else {
+        // 尚未到达
+        msgEl.innerHTML = '📍 距目的地 <strong>' + distStr + '</strong>，请驾车到达目的地附近再完成代驾';
+        msgEl.style.color = '#E67E22';
+        msgEl.style.display = 'block';
+        btnEl.disabled = true;
+        btnEl.style.opacity = '0.5';
+      }
+    }, function(err) {
+      // GPS获取失败时降级：允许手动完成，但提示无法校验
+      var msgEl = document.getElementById('arrive-check-msg');
+      if (msgEl) {
+        msgEl.innerHTML = '⚠️ 无法获取GPS位置，您可手动完成代驾（请确认已到达）';
+        msgEl.style.color = '#999';
+        msgEl.style.display = 'block';
+      }
+      var btnEl = document.getElementById('complete-order-btn');
+      if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = '1'; }
+      stopArrivalCheck();
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+  }
+
+  checkArrival();
+  _arrivalCheckTimer = setInterval(checkArrival, 15000); // 每15秒重新检测
+}
+
+function stopArrivalCheck() {
+  if (_arrivalCheckTimer) { clearInterval(_arrivalCheckTimer); _arrivalCheckTimer = null; }
+}
+
+// 计算两点之间的球面距离（米）
+function _calcDistance(lat1, lng1, lat2, lng2) {
+  var R = 6371000; // 地球半径(m)
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 // ============================================================

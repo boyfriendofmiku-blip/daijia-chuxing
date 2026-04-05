@@ -560,26 +560,38 @@ function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) 
   });
   toMarker.setMap(map);
 
-  // 路线规划
-  var driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME });
-  driving.search([fromLng, fromLat], [toLng, toLat], function(status, result) {
-    if (status === 'complete' && result.routes && result.routes.length > 0) {
-      var route = result.routes[0];
-      var path = route.path;
-      if (path && path.length > 0) {
-        var polyline = new AMap.Polyline({
-          path: path,
-          strokeColor: '#3777FF',
-          strokeWeight: 5,
-          strokeStyle: 'solid'
-        });
-        polyline.setMap(map);
+  // 路线规划 - 先异步加载 Driving 插件
+  AMap.plugin('AMap.Driving', function() {
+    var policy = (AMap.DrivingPolicy && AMap.DrivingPolicy.LEAST_TIME) ? AMap.DrivingPolicy.LEAST_TIME : 0;
+    var driving = new AMap.Driving({ policy: policy });
+    driving.search([fromLng, fromLat], [toLng, toLat], function(status, result) {
+      if (status === 'complete' && result.routes && result.routes.length > 0) {
+        var route = result.routes[0];
+        // 优先用 route.path，否则从 steps 中拼接
+        var path = route.path;
+        if ((!path || path.length === 0) && route.steps) {
+          path = [];
+          route.steps.forEach(function(step) {
+            if (step.path) path = path.concat(step.path);
+          });
+        }
+        if (path && path.length > 0) {
+          var polyline = new AMap.Polyline({
+            path: path,
+            strokeColor: '#3777FF',
+            strokeWeight: 5,
+            strokeStyle: 'solid'
+          });
+          polyline.setMap(map);
+        }
+        map.setFitView();
+        if (options && options.onRouteReady) {
+          var distance = parseFloat(route.distance) || 0;
+          var duration = parseFloat(route.time || route.duration) || 0;
+          options.onRouteReady({ distance: distance, duration: duration });
+        }
       }
-      map.setFitView();
-      if (options && options.onRouteReady) {
-        options.onRouteReady({ distance: route.distance, duration: route.duration });
-      }
-    }
+    });
   });
 
   return { map: map };

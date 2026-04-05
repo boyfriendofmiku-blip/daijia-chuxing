@@ -52,19 +52,19 @@
       tryLoad();
     })();
   </script>
-  <!-- 高德地图 API -->
+  <!-- 高德地图 API：onAMapReady 必须在 script 加载之前定义 -->
   <script type="text/javascript">
     window._AMapConfig = { key: '700c467755db139a0780ef3c86276a83' };
     window._AMapSecurityConfig = { securityJsCode: '31035fabae3227f92fdb9e90eb35490f' };
-  </script>
-  <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=700c467755db139a0780ef3c86276a83&callback=onAMapReady"></script>
-  <script>
     window.__amapReady = false;
     window.onAMapReady = function() {
       window.__amapReady = true;
       console.log('高德地图API已就绪');
       window.dispatchEvent(new Event('amap-ready'));
     };
+  </script>
+  <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=700c467755db139a0780ef3c86276a83&callback=onAMapReady"></script>
+  <script>
     
     // 监听Supabase加载失败事件
     window.addEventListener('supabase-load-failed', function() {

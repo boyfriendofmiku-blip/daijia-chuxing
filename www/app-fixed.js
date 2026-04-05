@@ -93,12 +93,31 @@ window.addEventListener('amap-ready', function() {
   window.dispatchEvent(new Event('tmap-ready'));
 });
 
-// 全局错误处理
+// 全局错误处理：只在真正致命错误时才覆盖 app，地图/网络错误一律忽略
 window.onerror = function(msg, url, line, col, error) {
+  // 忽略来自高德/腾讯地图CDN的错误
+  if (url && (url.indexOf('amap.com') >= 0 || url.indexOf('qq.com') >= 0 || url.indexOf('map') >= 0)) {
+    console.warn('[地图错误已忽略]', msg, url);
+    return true; // 阻止默认处理，不显示错误界面
+  }
+  // 忽略常见的非关键错误
+  if (msg && (
+    msg.indexOf('fireEvent') >= 0 ||
+    msg.indexOf('ResizeObserver') >= 0 ||
+    msg.indexOf('Script error') >= 0 ||
+    msg.indexOf('Cannot read properties of undefined') >= 0 && url && url.indexOf('app-fixed') < 0
+  )) {
+    console.warn('[非关键错误已忽略]', msg, url, line);
+    return true;
+  }
   console.error('全局错误:', msg, 'at', line + ':' + col, error);
-  var app = document.getElementById('app');
-  if (app) {
-    app.innerHTML = '<div style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:20px">⚠️</div><h3>应用加载失败</h3><p style="color:#666;margin:12px 0">' + msg + '</p><p style="color:#999;font-size:12px;margin:8px 0">' + url + ':' + line + ':' + col + '</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px">重新加载</button></div>';
+  // 只有 app-fixed.js 自身的严重错误才显示错误界面
+  if (url && url.indexOf('app-fixed') >= 0 && line > 200) {
+    var app = document.getElementById('app');
+    if (app && app.innerHTML.length < 200) {
+      // 只在 app 还没渲染出内容时才显示错误界面（避免覆盖已渲染的页面）
+      app.innerHTML = '<div style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:20px">⚠️</div><h3>应用加载失败</h3><p style="color:#666;margin:12px 0">' + msg + '</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px">重新加载</button></div>';
+    }
   }
   return false;
 };

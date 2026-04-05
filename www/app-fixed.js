@@ -1002,7 +1002,7 @@ function isNightTime() {
   return hour >= 20 || hour < 8;
 }
 
-// ============ 通知模块（本地localStorage存储） ============
+// ============ 通知模块（本地localStorage存储 + 浏览器推送） ============
 function _getNotifications() {
   try { return JSON.parse(localStorage.getItem('dj_notifications') || '[]'); } catch(e) { return []; }
 }
@@ -1014,6 +1014,54 @@ function addNotification(userId, title, content, type) {
   list.unshift({ id: genId(), userId: String(userId), title: title, content: content, type: type || 'info', time: now(), read: false });
   if (list.length > 100) list = list.slice(0, 100);
   _saveNotifications(list);
+  // 发送浏览器推送通知（如果用户已授权）
+  sendBrowserNotification(title, content, type);
+}
+
+// ============ 浏览器推送通知 ============
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') return;
+  if (Notification.permission === 'denied') return;
+  // 延迟请求权限，避免页面加载时立即弹出
+  setTimeout(function() {
+    Notification.requestPermission().then(function(permission) {
+      if (permission === 'granted') {
+        console.log('浏览器通知权限已获取');
+      }
+    });
+  }, 3000);
+}
+function sendBrowserNotification(title, body, type) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  // 避免重复通知：检查最近5秒内是否已发送过相同内容
+  var lastNotify = window.__lastNotification || {};
+  if (lastNotify.title === title && lastNotify.body === body && (Date.now() - lastNotify.time) < 5000) return;
+  window.__lastNotification = { title: title, body: body, time: Date.now() };
+  // 根据类型选择图标
+  var icon = '/icons/icon-192x192.png';
+  var badge = '/icons/icon-72x72.png';
+  var tag = type || 'default';
+  try {
+    var notification = new Notification(title, {
+      body: body,
+      icon: icon,
+      badge: badge,
+      tag: tag,
+      requireInteraction: false,
+      silent: false
+    });
+    // 点击通知跳转到应用
+    notification.onclick = function() {
+      window.focus();
+      notification.close();
+    };
+    // 5秒后自动关闭
+    setTimeout(function() { notification.close(); }, 5000);
+  } catch(e) {
+    console.warn('浏览器通知发送失败:', e);
+  }
 }
 function getUnreadCount(userId) {
   return _getNotifications().filter(function(n) { return n.userId === String(userId) && !n.read; }).length;
@@ -1062,6 +1110,7 @@ async function render() {
       case 'notifications':  app.innerHTML = renderNotifications(); break;
       case 'feedback':       app.innerHTML = renderFeedback(); break;
       case 'about':          app.innerHTML = renderAbout(); break;
+      case 'manage-addresses': app.innerHTML = renderManageAddresses(); break;
       case 'staff-auth':     app.innerHTML = renderStaffAuth(State.pageParams && State.pageParams.tab); break;
       case 'staff-main':     app.innerHTML = await renderStaffMain(); break;
       case 'staff-orders':   app.innerHTML = await renderStaffOrders(); break;
@@ -1275,6 +1324,26 @@ async function renderUserMain() {
 //  用户端 - 下单页面（不需要异步数据）
 // ============================================================
 function renderCreateOrder() {
+  // 读取用户保存的常用地址
+  var savedAddresses = [];
+  try {
+    savedAddresses = JSON.parse(localStorage.getItem('dj_saved_addresses') || '[]');
+  } catch(e) {}
+  // 构建常用地址快捷按钮HTML
+  var quickAddrHtml = '';
+  if (savedAddresses.length > 0) {
+    quickAddrHtml = '<div class="quick-address-bar" style="margin-bottom:12px;padding:12px;background:linear-gradient(135deg,#f8f9fa,#e9ecef);border-radius:12px">' +
+      '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📍 常用地址</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    savedAddresses.forEach(function(addr, idx) {
+      var icon = addr.tag === 'home' ? '🏠' : addr.tag === 'work' ? '🏢' : '📍';
+      var label = addr.tag === 'home' ? '家' : addr.tag === 'work' ? '公司' : addr.name || '地址' + (idx + 1);
+      quickAddrHtml += '<button class="quick-addr-btn" data-addr-idx="' + idx + '" style="padding:8px 14px;background:#fff;border:1px solid var(--border);border-radius:20px;font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;transition:all 0.2s">' +
+        '<span>' + icon + '</span><span>' + label + '</span></button>';
+    });
+    quickAddrHtml += '</div></div>';
+  }
+
   return '<div class="page">' +
     '<div class="page-header"><button class="back-btn" data-action="user-main">←</button><h2>叫代驾</h2></div>' +
     '<div class="page-content">' +
@@ -1292,6 +1361,7 @@ function renderCreateOrder() {
         '<div class="map-tool-info" id="map-tool-info">点击地图选位置 / 拖动标记</div>' +
         '<div id="route-info" class="route-info-panel" style="display:none"></div>' +
       '</div>' +
+      quickAddrHtml +
       '<div class="card">' +
         '<div class="form-group"><label>🟢 出发地</label><input class="form-control" id="order-from" placeholder="点击地图选择或搜索设置" /><input type="hidden" id="order-from-lat" /><input type="hidden" id="order-from-lng" /></div>' +
         '<button class="swap-btn" id="swap-locations-btn" title="交换起终点">⇅ 交换</button>' +
@@ -1345,12 +1415,33 @@ async function renderOrderDetail(orderId) {
 
   // 查找司机信息
   let driverInfoHtml = '';
+  let etaHtml = ''; // ETA 预计到达时间
   if ((isUser || isStaff) && order.driverId && ['accepted', 'ongoing', 'completed'].includes(order.status)) {
     const drivers = await DB.getDrivers();
     const driver = drivers.find(function(d) { return d.id === order.driverId; });
     if (driver) {
+      // 计算 ETA：如果有司机位置和出发地位置
+      let etaText = '';
+      if (order.status === 'accepted' && order.fromLat && order.fromLng) {
+        // 尝试从 localStorage 获取司机最新位置
+        let driverPos = null;
+        try {
+          var cached = JSON.parse(localStorage.getItem('dj_driver_pos_' + order.id) || 'null');
+          if (cached && (Date.now() - cached.ts) < 120000) driverPos = cached;
+        } catch(e) {}
+        // 如果有司机位置，计算到出发地的距离和ETA
+        if (driverPos) {
+          var distToPickup = _calcDistance(driverPos.lat, driverPos.lng, parseFloat(order.fromLat), parseFloat(order.fromLng));
+          var etaMin = Math.max(1, Math.ceil(distToPickup / 300)); // 假设平均速度 300m/分钟（约18km/h城市道路）
+          etaText = '<div class="eta-badge" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:6px 12px;border-radius:20px;font-size:13px;display:inline-flex;align-items:center;gap:6px;margin-top:8px"><span style="font-size:14px">🚗</span><span>距您 ' + (distToPickup >= 1000 ? (distToPickup/1000).toFixed(1) + 'km' : Math.round(distToPickup) + 'm') + '，约 ' + etaMin + ' 分钟到达</span></div>';
+        } else {
+          etaText = '<div class="eta-badge" style="background:#f0f0f0;color:#666;padding:6px 12px;border-radius:20px;font-size:13px;display:inline-flex;align-items:center;gap:6px;margin-top:8px"><span style="font-size:14px">🚗</span><span>司机正在赶来...</span></div>';
+        }
+        etaHtml = '<div style="margin-bottom:12px">' + etaText + '</div>';
+      }
       driverInfoHtml = '<div class="card" style="margin-bottom:16px">' +
         '<div class="card-header">🧑‍✈️ 代驾司机</div>' +
+        etaHtml +
         '<div class="driver-info-card">' +
           '<div class="driver-avatar">🧑‍✈️</div>' +
           '<div style="flex:1"><div class="driver-name">' + driver.name + '</div><div class="driver-detail">📞 ' + driver.phone + '</div><div class="driver-detail">驾驶证：' + (driver.license || '已验证') + '</div><div class="driver-rating">⭐ ' + (driver.rating || '4.9') + ' 分</div></div>' +
@@ -1739,6 +1830,7 @@ async function renderProfile() {
       '</div>' +
       '<div class="card"><div class="card-header">更多</div>' +
         '<div style="display:flex;flex-direction:column;gap:4px">' +
+          (isDriver ? '' : '<div data-action="manage-addresses" style="padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>📍 常用地址管理</span><span style="color:var(--text-muted)">›</span></div>') +
           '<div data-action="notifications" style="padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>📢 消息通知</span><span style="display:flex;align-items:center;gap:6px">' + (unreadCount > 0 ? '<span class="unread-badge" style="font-size:11px">' + unreadCount + '</span>' : '') + '<span style="color:var(--text-muted)">›</span></span></div>' +
           '<div data-action="stats" style="padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>📊 统计报表</span><span style="color:var(--text-muted)">›</span></div>' +
           '<div data-action="feedback" style="padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>💡 意见反馈</span><span style="color:var(--text-muted)">›</span></div>' +
@@ -1858,6 +1950,61 @@ function renderAbout() {
 }
 
 // ============================================================
+//  常用地址管理
+// ============================================================
+function renderManageAddresses() {
+  var savedAddresses = [];
+  try {
+    savedAddresses = JSON.parse(localStorage.getItem('dj_saved_addresses') || '[]');
+  } catch(e) {}
+
+  var listHtml = '';
+  if (savedAddresses.length === 0) {
+    listHtml = '<div class="empty-state" style="padding:40px 0"><div class="empty-icon">📍</div><p>还没有保存的地址</p><p style="font-size:13px;color:var(--text-muted);margin-top:8px">添加家或公司地址，下单更快捷</p></div>';
+  } else {
+    listHtml = '<div style="display:flex;flex-direction:column;gap:12px">';
+    savedAddresses.forEach(function(addr, idx) {
+      var icon = addr.tag === 'home' ? '🏠' : addr.tag === 'work' ? '🏢' : '📍';
+      var label = addr.tag === 'home' ? '家' : addr.tag === 'work' ? '公司' : addr.name || '地址' + (idx + 1);
+      listHtml += '<div class="card" style="position:relative">' +
+        '<div style="display:flex;align-items:flex-start;gap:12px">' +
+          '<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">' + icon + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:600;margin-bottom:4px">' + label + '</div>' +
+            '<div style="font-size:13px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + addr.address + '</div>' +
+          '</div>' +
+          '<button class="btn btn-sm btn-danger" data-action="delete-address" data-addr-idx="' + idx + '" style="flex-shrink:0">删除</button>' +
+        '</div>' +
+      '</div>';
+    });
+    listHtml += '</div>';
+  }
+
+  return '<div class="page">' +
+    '<div class="page-header"><button class="back-btn" data-action="profile">←</button><h2>常用地址</h2></div>' +
+    '<div class="page-content">' +
+      '<div class="card" style="margin-bottom:16px"><div class="card-header">➕ 添加新地址</div>' +
+        '<div class="form-group"><label>地址类型</label>' +
+          '<div style="display:flex;gap:12px;margin-bottom:12px">' +
+            '<label style="flex:1;padding:12px;border:2px solid var(--border);border-radius:10px;text-align:center;cursor:pointer;transition:all 0.2s" class="addr-type-option" data-type="home"><div style="font-size:24px;margin-bottom:4px">🏠</div><div style="font-size:13px">家</div></label>' +
+            '<label style="flex:1;padding:12px;border:2px solid var(--border);border-radius:10px;text-align:center;cursor:pointer;transition:all 0.2s" class="addr-type-option" data-type="work"><div style="font-size:24px;margin-bottom:4px">🏢</div><div style="font-size:13px">公司</div></label>' +
+            '<label style="flex:1;padding:12px;border:2px solid var(--border);border-radius:10px;text-align:center;cursor:pointer;transition:all 0.2s" class="addr-type-option" data-type="other"><div style="font-size:24px;margin-bottom:4px">📍</div><div style="font-size:13px">其他</div></label>' +
+          '</div>' +
+          '<input type="hidden" id="new-addr-type" value="home" />' +
+        '</div>' +
+        '<div class="form-group" id="addr-name-group" style="display:none"><label>地址名称</label><input class="form-control" id="new-addr-name" placeholder="如：父母家、健身房" /></div>' +
+        '<div class="form-group"><label>详细地址</label><input class="form-control" id="new-addr-address" placeholder="请输入详细地址" /></div>' +
+        '<div class="form-group"><label>经纬度（可选，用于地图定位）</label><div style="display:flex;gap:8px">' +
+          '<input class="form-control" id="new-addr-lat" placeholder="纬度" style="flex:1" />' +
+          '<input class="form-control" id="new-addr-lng" placeholder="经度" style="flex:1" />' +
+        '</div></div>' +
+        '<button class="btn btn-primary btn-block" id="add-address-btn">添加地址</button>' +
+      '</div>' +
+      '<div class="card"><div class="card-header">📍 已保存地址</div>' + listHtml + '</div>' +
+    '</div></div>';
+}
+
+// ============================================================
 //  事件绑定
 // ============================================================
 function bindEvents() {
@@ -1896,6 +2043,7 @@ function bindEvents() {
       if (!user) { showToast('手机号或密码错误', 'error'); return; }
       State.currentUser = { id: user.id, name: user.name, phone: user.phone, type: 'user', createdAt: user.createdAt };
       showToast('登录成功，欢迎回来 ' + user.name, 'success');
+      requestNotificationPermission(); // 请求浏览器通知权限
       navigate('user-main');
     });
   }
@@ -1932,6 +2080,7 @@ function bindEvents() {
       if (!driver) { showToast('手机号或密码错误', 'error'); return; }
       State.currentUser = { id: driver.id, name: driver.name, phone: driver.phone, license: driver.license || driver.car_plate, type: 'driver', rating: driver.rating, createdAt: driver.createdAt };
       showToast('登录成功，欢迎 ' + driver.name, 'success');
+      requestNotificationPermission(); // 请求浏览器通知权限
       navigate('driver-main');
     });
   }
@@ -2104,6 +2253,58 @@ function bindEvents() {
     window.addEventListener('amap-ready', mapReadyHandler);
   }
 
+  // ===== 常用地址快捷选择 =====
+  var quickAddrBtns = document.querySelectorAll('.quick-addr-btn');
+  quickAddrBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(btn.dataset.addrIdx);
+      var savedAddresses = [];
+      try {
+        savedAddresses = JSON.parse(localStorage.getItem('dj_saved_addresses') || '[]');
+      } catch(e) {}
+      var addr = savedAddresses[idx];
+      if (!addr) return;
+
+      // 判断当前焦点在哪个输入框，或者自动填充目的地（如果出发地已有）
+      var fromInput = document.getElementById('order-from');
+      var toInput = document.getElementById('order-to');
+      var fromLat = document.getElementById('order-from-lat');
+      var fromLng = document.getElementById('order-from-lng');
+      var toLat = document.getElementById('order-to-lat');
+      var toLng = document.getElementById('order-to-lng');
+
+      if (fromInput && !fromInput.value) {
+        // 填充出发地
+        fromInput.value = addr.address;
+        if (fromLat) fromLat.value = addr.lat || '';
+        if (fromLng) fromLng.value = addr.lng || '';
+        showToast('已设置出发地：' + addr.name, 'success');
+      } else if (toInput && !toInput.value) {
+        // 填充目的地
+        toInput.value = addr.address;
+        if (toLat) toLat.value = addr.lat || '';
+        if (toLng) toLng.value = addr.lng || '';
+        showToast('已设置目的地：' + addr.name, 'success');
+      } else {
+        // 都填了，询问替换哪个
+        if (confirm('出发地和目的地都已有地址，是否将【' + addr.name + '】设为目的地？')) {
+          toInput.value = addr.address;
+          if (toLat) toLat.value = addr.lat || '';
+          if (toLng) toLng.value = addr.lng || '';
+        }
+      }
+
+      // 如果地图已初始化，更新标记
+      if (window.__orderMap && addr.lat && addr.lng) {
+        var TMap = window.TMap || window.AMap;
+        if (TMap) {
+          var pos = new TMap.LatLng(addr.lat, addr.lng);
+          window.__orderMap.setCenter(pos);
+        }
+      }
+    });
+  });
+
   // ===== 估算费用 =====
   var estimateBtn = document.getElementById('estimate-btn');
   if (estimateBtn) {
@@ -2273,6 +2474,56 @@ function bindEvents() {
     });
   }
 
+  // ===== 常用地址管理页面事件 =====
+  if (State.currentPage === 'manage-addresses') {
+    // 地址类型选择
+    document.querySelectorAll('.addr-type-option').forEach(function(el) {
+      el.addEventListener('click', function() {
+        document.querySelectorAll('.addr-type-option').forEach(function(o) { o.style.borderColor = 'var(--border)'; o.style.background = ''; });
+        el.style.borderColor = 'var(--primary)';
+        el.style.background = '#FFF0EB';
+        var type = el.dataset.type;
+        document.getElementById('new-addr-type').value = type;
+        var nameGroup = document.getElementById('addr-name-group');
+        if (nameGroup) nameGroup.style.display = (type === 'other') ? 'block' : 'none';
+      });
+    });
+    // 默认选中家
+    var defaultType = document.querySelector('.addr-type-option[data-type="home"]');
+    if (defaultType) {
+      defaultType.style.borderColor = 'var(--primary)';
+      defaultType.style.background = '#FFF0EB';
+    }
+
+    // 添加地址按钮
+    var addAddrBtn = document.getElementById('add-address-btn');
+    if (addAddrBtn) {
+      addAddrBtn.addEventListener('click', function() {
+        var type = document.getElementById('new-addr-type').value;
+        var name = (type === 'other') ? (document.getElementById('new-addr-name').value.trim() || '其他地址') : (type === 'home' ? '家' : '公司');
+        var address = document.getElementById('new-addr-address').value.trim();
+        var lat = document.getElementById('new-addr-lat').value.trim();
+        var lng = document.getElementById('new-addr-lng').value.trim();
+
+        if (!address) { showToast('请输入详细地址', 'error'); return; }
+
+        var savedAddresses = [];
+        try { savedAddresses = JSON.parse(localStorage.getItem('dj_saved_addresses') || '[]'); } catch(e) {}
+        // 检查是否已存在同类型地址
+        var existingIdx = savedAddresses.findIndex(function(a) { return a.tag === type; });
+        if (existingIdx >= 0 && type !== 'other') {
+          if (!confirm('已存在' + (type === 'home' ? '家' : '公司') + '地址，是否覆盖？')) return;
+          savedAddresses[existingIdx] = { tag: type, name: name, address: address, lat: lat, lng: lng };
+        } else {
+          savedAddresses.push({ tag: type, name: name, address: address, lat: lat, lng: lng });
+        }
+        localStorage.setItem('dj_saved_addresses', JSON.stringify(savedAddresses));
+        showToast('地址添加成功！', 'success');
+        render(); // 刷新页面显示新地址
+      });
+    }
+  }
+
   // 客服端事件绑定
   if (typeof bindStaffEvents === 'function') {
     bindStaffEvents();
@@ -2303,8 +2554,23 @@ async function handleAction(action, dataset) {
     case 'notifications': navigate('notifications'); break;
     case 'feedback':    navigate('feedback'); break;
     case 'about':       navigate('about'); break;
+    case 'manage-addresses': navigate('manage-addresses'); break;
     case 'logout':      logout(); break;
     case 'clear-data':  clearLocalData(); break;
+    case 'delete-address': {
+      var idx = parseInt(dataset.addrIdx);
+      var savedAddresses = [];
+      try { savedAddresses = JSON.parse(localStorage.getItem('dj_saved_addresses') || '[]'); } catch(e) {}
+      if (idx >= 0 && idx < savedAddresses.length) {
+        if (confirm('确定删除该地址吗？')) {
+          savedAddresses.splice(idx, 1);
+          localStorage.setItem('dj_saved_addresses', JSON.stringify(savedAddresses));
+          showToast('地址已删除', 'success');
+          render();
+        }
+      }
+      break;
+    }
 
     case 'order-detail':
       navigate('order-detail', { orderId: dataset.orderId });

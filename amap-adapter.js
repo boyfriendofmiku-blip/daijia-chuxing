@@ -406,8 +406,17 @@ function initOrderMap(opts) {
           }
         });
       }, function(err) {
-        showToast('定位失败：' + (err.message || '请允许浏览器获取位置'), 'error');
-        updateInfo('点击地图选择位置');
+        var errMsg = '定位失败，请手动选择位置';
+        if (err && err.code === 1) {
+          errMsg = '位置权限被拒绝';
+          showGeoPermissionTip();
+        } else if (err && err.code === 2) {
+          errMsg = '无法获取位置，请检查GPS是否开启';
+        } else {
+          errMsg = '定位超时，请手动选择位置';
+        }
+        showToast(errMsg, 'error');
+        updateInfo('📍 点击地图选择位置');
       }, { enableHighAccuracy: true, timeout: 8000 });
     });
   }
@@ -506,8 +515,9 @@ function initOrderMap(opts) {
     });
   }
 
-  // 浏览器定位
+  // 浏览器定位（主动请求权限，有详细错误提示）
   if (navigator.geolocation) {
+    updateInfo('⏳ 正在获取位置...');
     navigator.geolocation.getCurrentPosition(function(pos) {
       var lat = pos.coords.latitude;
       var lng = pos.coords.longitude;
@@ -517,12 +527,29 @@ function initOrderMap(opts) {
         var address = result && result.regeocode ? result.regeocode.formattedAddress : '我的位置';
         updateMarker('from', lng, lat, address);
         selectMode = 'to';
-        updateInfo('✅ 已自动定位，点击地图设置目的地');
+        updateInfo('✅ 已自动定位，请设置目的地');
       });
-    }, function() {}, { timeout: 5000 });
+    }, function(err) {
+      // 权限被拒绝或不可用时的友好提示
+      var errMsg = '📍 点击地图选择出发地';
+      if (err && err.code === 1) {
+        // PERMISSION_DENIED
+        errMsg = '📍 位置权限未开启，请手动选择出发地';
+        // 弹出引导提示（仅首次）
+        if (!window.__geoPermTipShown) {
+          window.__geoPermTipShown = true;
+          showGeoPermissionTip();
+        }
+      } else if (err && err.code === 2) {
+        errMsg = '📍 无法获取位置，请手动选择出发地';
+      } else {
+        errMsg = '📍 位置获取超时，请手动选择出发地';
+      }
+      updateInfo(errMsg);
+    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  } else {
+    updateInfo('📍 浏览器不支持定位，请手动输入地址');
   }
-
-  updateInfo('📍 点击地图选择出发地');
 
   return {
     _getRouteInfo: function() {
@@ -600,3 +627,76 @@ function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) 
 // 导出全局函数供 app-fixed.js 调用
 window.initAMapOrderMap = initOrderMap;
 window.initAMapRouteDisplay = initRouteDisplayMap;
+
+/**
+ * 定位权限被拒时的友好引导弹窗
+ * 支持 iOS Safari / Android Chrome / 微信浏览器
+ */
+function showGeoPermissionTip() {
+  // 避免重复弹出
+  if (document.getElementById('geo-perm-tip')) return;
+
+  var ua = navigator.userAgent.toLowerCase();
+  var isIOS = /iphone|ipad|ipod/.test(ua);
+  var isWechat = /micromessenger/.test(ua);
+  var isAndroid = /android/.test(ua);
+
+  var guide = '';
+  if (isWechat) {
+    guide = '请点击右上角菜单 → 在浏览器中打开，然后允许位置权限';
+  } else if (isIOS) {
+    guide = '前往「设置」→「Safari」→「位置」→ 选择「询问」或「允许」';
+  } else if (isAndroid) {
+    guide = '前往手机「设置」→「应用权限」→「浏览器」→ 开启「位置」权限';
+  } else {
+    guide = '请在浏览器地址栏左侧点击🔒图标，开启「位置」权限';
+  }
+
+  var tip = document.createElement('div');
+  tip.id = 'geo-perm-tip';
+  tip.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;' +
+    'background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.18);' +
+    'padding:16px 20px;max-width:320px;width:90%;animation:slideUp 0.3s ease';
+  tip.innerHTML =
+    '<div style="display:flex;align-items:flex-start;gap:12px">' +
+      '<span style="font-size:24px;flex-shrink:0">📍</span>' +
+      '<div style="flex:1">' +
+        '<div style="font-size:14px;font-weight:600;color:#2c3e50;margin-bottom:6px">需要位置权限</div>' +
+        '<div style="font-size:13px;color:#666;line-height:1.5">' + guide + '</div>' +
+        '<div style="margin-top:10px;display:flex;gap:8px">' +
+          '<button id="geo-tip-skip" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;background:#f8f8f8;font-size:13px;cursor:pointer">稍后再说</button>' +
+          '<button id="geo-tip-manual" style="flex:1;padding:8px;border:none;border-radius:8px;background:linear-gradient(135deg,#E8572A,#ff8c42);color:#fff;font-size:13px;cursor:pointer;font-weight:600">手动输入地址</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(tip);
+
+  // 关闭按钮
+  var skipBtn = document.getElementById('geo-tip-skip');
+  var manualBtn = document.getElementById('geo-tip-manual');
+  
+  function closeTip() {
+    tip.style.animation = 'slideDown 0.25s ease';
+    setTimeout(function() { if (tip.parentNode) tip.remove(); }, 250);
+  }
+
+  if (skipBtn) skipBtn.addEventListener('click', closeTip);
+  if (manualBtn) {
+    manualBtn.addEventListener('click', function() {
+      closeTip();
+      // 聚焦到出发地输入框
+      var fromInput = document.getElementById('order-from');
+      if (fromInput) {
+        fromInput.focus();
+        fromInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
+
+  // 5秒后自动消失
+  setTimeout(closeTip, 8000);
+}
+
+// 全局导出
+window.showGeoPermissionTip = showGeoPermissionTip;

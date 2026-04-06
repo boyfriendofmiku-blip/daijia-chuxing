@@ -1,6 +1,6 @@
 // 代驾出行 - Service Worker
-// v3 - 修复CDN拦截问题，升级缓存版本强制清除旧缓存
-const CACHE_NAME = 'daijia-v3';
+// v4 - 新增热更新支持，缓存 updater.js 和 version.json
+const CACHE_NAME = 'daijia-v4';
 const ASSETS = [
   '/',
   '/index.html',
@@ -8,6 +8,8 @@ const ASSETS = [
   '/app-fixed.js',
   '/supabase.js',
   '/staff.js',
+  '/amap-adapter.js',
+  '/updater.js',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png'
@@ -21,7 +23,13 @@ function isExternal(url) {
          url.includes('supabase.co') ||
          url.includes('map.qq.com') ||
          url.includes('apis.map.qq.com') ||
+         url.includes('webapi.amap.com') ||
          url.includes('lbs.qq.com');
+}
+
+// version.json 始终从网络获取，不走缓存
+function isVersionCheck(url) {
+  return url.includes('version.json');
 }
 
 // 安装：缓存核心资源
@@ -50,6 +58,12 @@ self.addEventListener('fetch', e => {
   // 外部CDN/API请求：直接透传，不缓存、不拦截
   if (isExternal(e.request.url)) {
     return; // 让浏览器直接处理
+  }
+
+  // version.json：始终从网络取，不缓存（保证热更新检测最新）
+  if (isVersionCheck(e.request.url)) {
+    e.respondWith(fetch(e.request, { cache: 'no-store' }));
+    return;
   }
 
   // 本地资源：网络优先，失败回退缓存

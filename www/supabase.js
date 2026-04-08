@@ -52,6 +52,20 @@ const _cache = {
   CACHE_TTL: 5000 // 5秒缓存
 };
 
+// ============ 工具函数 ============
+
+// Haversine 公式：计算两点间距离（米）
+function _haversine(lat1, lng1, lat2, lng2) {
+  var R = 6371000; // 地球半径（米）
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 // ============ 通用查询 ============
 
 async function fetchUsers() {
@@ -396,6 +410,156 @@ const DB = {
       .subscribe();
   },
 
+  // ============ 司机位置 ============
+  async updateDriverLocation(driverId, lat, lng, accuracy) {
+    try {
+      const { error } = await sb()
+        .from('driver_locations')
+        .upsert({
+          driver_id: parseInt(driverId),
+          lat: parseFloat(lat),
+          lng: parseFloat(lng),
+          accuracy: parseFloat(accuracy || 0),
+          updated_at: new Date().toISOString()
+        });
+      if (error) console.error('updateDriverLocation error:', error);
+    } catch(e) { console.warn('updateDriverLocation exception:', e); }
+  },
+
+  async getDriverLocation(driverId) {
+    try {
+      const { data, error } = await sb()
+        .from('driver_locations')
+        .select('*')
+        .eq('driver_id', parseInt(driverId))
+        .single();
+      if (error || !data) return null;
+      return { lat: data.lat, lng: data.lng, accuracy: data.accuracy, updatedAt: data.updated_at };
+    } catch(e) { return null; }
+  },
+
+  // 获取附近在线司机（前端用 Haversine 过滤，SQL 预筛选一个矩形区域减少数据量）
+  async getNearbyDrivers(lat, lng, radiusMeters) {
+    try {
+      // 近似：1度 ≈ 111km，先用矩形预筛选，再前端精确计算
+      var dLat = (radiusMeters / 111000) * 1.5;
+      var dLng = (radiusMeters / (111000 * Math.cos(lat * Math.PI / 180))) * 1.5;
+      var minLat = lat - dLat;
+      var maxLat = lat + dLat;
+      var minLng = lng - dLng;
+      var maxLng = lng + dLng;
+
+      // 获取矩形范围内的司机位置
+      var { data: locs, error } = await sb()
+        .from('driver_locations')
+        .select('driver_id, lat, lng, updated_at')
+        .gte('lat', minLat).lte('lat', maxLat)
+        .gte('lng', minLng).lte('lng', maxLng);
+      if (error || !locs) return [];
+
+      // 获取这些司机的基本信息（在线状态）
+      var driverIds = locs.map(function(l) { return l.driver_id; });
+      if (driverIds.length === 0) return [];
+
+      var { data: drivers } = await sb()
+        .from('users')
+        .select('id, name, phone, car_model, car_plate, rating')
+        .eq('role', 'driver')
+        .eq('online', true)
+        .in('id', driverIds);
+
+      if (!drivers || drivers.length === 0) return [];
+
+      var driverMap = {};
+      drivers.forEach(function(d) { driverMap[d.id] = d; });
+
+      var results = [];
+      locs.forEach(function(loc) {
+        var d = driverMap[loc.driver_id];
+        if (!d) return;
+        var dist = _haversine(lat, lng, loc.lat, loc.lng);
+        if (dist <= radiusMeters) {
+          results.push({
+            driverId: String(loc.driver_id),
+            name: d.name,
+            phone: d.phone,
+            carModel: d.car_model,
+            carPlate: d.car_plate,
+            rating: d.rating || '4.9',
+            lat: loc.lat,
+            lng: loc.lng,
+            distance: dist,
+            updatedAt: loc.updated_at
+          });
+        }
+      });
+
+      // 按距离排序
+      results.sort(function(a, b) { return a.distance - b.distance; });
+      return results;
+    } catch(e) {
+      console.warn('getNearbyDrivers exception:', e);
+      return [];
+    }
+  },
+
+  // 更新订单派单状态
+  async setOrderDispatch(orderId, driverId, expiresAt) {
+    try {
+      await sb()
+        .from('orders')
+        .update({
+          assigned_to: parseInt(driverId),
+          dispatch_expires_at: expiresAt,
+          auto_dispatched: true
+        })
+        .eq('id', parseInt(orderId));
+    } catch(e) { console.warn('setOrderDispatch error:', e); }
+  },
+
+  // 清除订单派单状态（被拒或超时）
+  async clearOrderDispatch(orderId) {
+    try {
+      await sb()
+        .from('orders')
+        .update({
+          assigned_to: null,
+          dispatch_expires_at: null
+        })
+        .eq('id', parseInt(orderId));
+    } catch(e) { console.warn('clearOrderDispatch error:', e); }
+  },
+
+  // 接受派单
+  async acceptDispatch(orderId, driverId) {
+    try {
+      var { data, error } = await sb()
+        .from('orders')
+        .update({ status: 'accepted', driver_id: parseInt(driverId), accepted_at: new Date().toISOString(), assigned_to: null, dispatch_expires_at: null })
+        .eq('id', parseInt(orderId))
+        .eq('assigned_to', parseInt(driverId))
+        .select()
+        .single();
+      if (error) {
+        // 已经被其他司机接走
+        if (error.code === '23505' || error.message.includes('assigned_to')) {
+          return { taken: true };
+        }
+        return { error: error.message };
+      }
+      return { success: true, order: data };
+    } catch(e) {
+      return { error: e.message };
+    }
+  },
+
+  // 拒绝派单
+  async rejectDispatch(orderId, driverId) {
+    await this.clearOrderDispatch(orderId);
+    return { success: true };
+  },
+
+  // ============ Haversine 距离计算（米）============
   // ============ 短信验证码 ============
   // 发送验证码
   async sendSMS(phone, type = 'register', role = 'passenger') {

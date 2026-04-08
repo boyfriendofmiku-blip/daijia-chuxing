@@ -1877,6 +1877,10 @@ function bindEvents() {
       addNotification(State.currentUser.id, '下单成功', '您的代驾订单 #' + order.id.slice(-6).toUpperCase() + ' 已提交，等待司机接单。', 'order');
       showToast('下单成功！等待司机接单 🎉', 'success');
       navigate('order-detail', { orderId: order.id });
+      // 自动派单：查找附近司机并派单
+      if (order.from_lat && order.from_lng) {
+        triggerAutoDispatch(order.id, order.from_lat, order.from_lng);
+      }
     });
   }
 
@@ -2501,6 +2505,158 @@ function _calcDistance(lat1, lng1, lat2, lng2) {
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ============================================================
+//  自动派单引擎
+// ============================================================
+var _autoDispatchTimers = {}; // orderId -> timer
+
+async function triggerAutoDispatch(orderId, fromLat, fromLng) {
+  var DISPATCH_RADIUS = 500; // 米
+  var DISPATCH_TIMEOUT = 30000; // 30秒自动放弃当前司机
+
+  console.log('[AutoDispatch] 查找附近司机，距离范围:', DISPATCH_RADIUS, '米');
+  var nearby = await DB.getNearbyDrivers(fromLat, fromLng, DISPATCH_RADIUS);
+
+  if (nearby.length === 0) {
+    console.log('[AutoDispatch] 500米内无在线司机，等待大厅抢单');
+    showToast('500米内暂无空闲司机，请等待大厅司机主动接单', '', 5000);
+    return;
+  }
+
+  var driver = nearby[0];
+  console.log('[AutoDispatch] 派单给司机:', driver.name, '距离:', Math.round(driver.distance), '米');
+  showToast('系统已自动派单给附近司机 🚗', '', 4000);
+
+  // 派单：设置 assigned_to 和过期时间
+  var expiresAt = new Date(Date.now() + DISPATCH_TIMEOUT).toISOString();
+  await DB.setOrderDispatch(orderId, driver.driverId, expiresAt);
+
+  // 存储派单信息到 localStorage（司机端可感知）
+  var dispatchInfo = {
+    orderId: orderId,
+    driverId: driver.driverId,
+    expiresAt: expiresAt,
+    driverName: driver.name,
+    distance: driver.distance,
+    dispatchedAt: Date.now()
+  };
+  localStorage.setItem('dj_dispatch_' + orderId, JSON.stringify(dispatchInfo));
+  // 同时按 driverId 存储（司机端轮询用）
+  localStorage.setItem('dj_dispatch_for_' + driver.driverId, JSON.stringify(dispatchInfo));
+
+  // 设置超时：如果司机30秒内未响应，清除派单，尝试下一个司机
+  _scheduleNextDriver(orderId, fromLat, fromLng, nearby, 0);
+}
+
+function _scheduleNextDriver(orderId, fromLat, fromLng, nearbyDrivers, startIdx) {
+  var DISPATCH_TIMEOUT = 30000;
+  // 清除旧的 timer
+  if (_autoDispatchTimers[orderId]) {
+    clearTimeout(_autoDispatchTimers[orderId]);
+    _autoDispatchTimers[orderId] = null;
+  }
+
+  if (startIdx >= nearbyDrivers.length) {
+    console.log('[AutoDispatch] 所有附近司机均未响应，等待大厅抢单');
+    delete _autoDispatchTimers[orderId];
+    return;
+  }
+
+  var driver = nearbyDrivers[startIdx];
+  var expiresAt = new Date(Date.now() + DISPATCH_TIMEOUT).toISOString();
+  var dispatchInfo = {
+    orderId: orderId,
+    driverId: driver.driverId,
+    expiresAt: expiresAt,
+    driverName: driver.name,
+    distance: driver.distance,
+    dispatchedAt: Date.now()
+  };
+  localStorage.setItem('dj_dispatch_' + orderId, JSON.stringify(dispatchInfo));
+  localStorage.setItem('dj_dispatch_for_' + driver.driverId, JSON.stringify(dispatchInfo));
+
+  console.log('[AutoDispatch] 派单给司机:', driver.name, '距离:', Math.round(driver.distance), '米');
+
+  _autoDispatchTimers[orderId] = setTimeout(async function() {
+    var current = JSON.parse(localStorage.getItem('dj_dispatch_' + orderId) || '{}');
+    if (current.driverId === driver.driverId) {
+      await DB.clearOrderDispatch(orderId);
+      localStorage.removeItem('dj_dispatch_' + orderId);
+      localStorage.removeItem('dj_dispatch_for_' + driver.driverId);
+      _scheduleNextDriver(orderId, fromLat, fromLng, nearbyDrivers, startIdx + 1);
+    }
+  }, DISPATCH_TIMEOUT);
+}
+
+// ============================================================
+//  司机位置上报
+// ============================================================
+var _driverLocationTimer = null;
+
+async function startDriverLocationTracking() {
+  if (!navigator.geolocation) {
+    console.warn('[GPS] 浏览器不支持定位');
+    return;
+  }
+  function updateLocation() {
+    navigator.geolocation.getCurrentPosition(async function(pos) {
+      var lat = pos.coords.latitude;
+      var lng = pos.coords.longitude;
+      var accuracy = pos.coords.accuracy;
+      await DB.updateDriverLocation(State.currentUser.id, lat, lng, accuracy);
+      localStorage.setItem('dj_my_location', JSON.stringify({ lat: lat, lng: lng, ts: Date.now() }));
+    }, function(err) {
+      console.warn('[GPS] 获取位置失败:', err.message);
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 });
+  }
+  updateLocation();
+  _driverLocationTimer = setInterval(updateLocation, 10000);
+}
+
+function stopDriverLocationTracking() {
+  if (_driverLocationTimer) {
+    clearInterval(_driverLocationTimer);
+    _driverLocationTimer = null;
+  }
+}
+
+// ============================================================
+//  派单通知 UI
+// ============================================================
+function renderDispatchNotification() {
+  if (!State.currentUser || State.currentUser.type !== 'driver' || !State.driverOnline) return '';
+  var pendingDispatches = [];
+  var dispatchKey = 'dj_dispatch_for_' + State.currentUser.id;
+  var raw = localStorage.getItem(dispatchKey);
+  if (raw) {
+    try {
+      var info = JSON.parse(raw);
+      if (info && info.driverId === State.currentUser.id && new Date(info.expiresAt) > new Date()) {
+        pendingDispatches.push(info);
+      } else if (info && info.driverId === State.currentUser.id) {
+        localStorage.removeItem(dispatchKey); // 已过期，清理
+      }
+    } catch(e) {}
+  }
+  if (pendingDispatches.length === 0) return '';
+
+  var info = pendingDispatches[0];
+  var distText = info.distance ? (info.distance >= 1000 ? (info.distance / 1000).toFixed(1) + 'km' : Math.round(info.distance) + 'm') : '';
+  var remainingSec = Math.max(0, Math.round((new Date(info.expiresAt) - new Date()) / 1000));
+  return '<div id="dispatch-notification" class="dispatch-notification">' +
+    '<div class="dispatch-header">📍 系统派单</div>' +
+    '<div class="dispatch-body">' +
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">您有一条新派单</div>' +
+      (distText ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">📏 距离您约 ' + distText + '</div>' : '') +
+      '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">⏱️ 剩余 <span id="dispatch-countdown">' + remainingSec + '</span> 秒</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="btn btn-sm btn-primary" data-action="accept-dispatch" data-order-id="' + info.orderId + '" style="flex:1">🚗 接单</button>' +
+        '<button class="btn btn-sm btn-outline" data-action="reject-dispatch" data-order-id="' + info.orderId + '" style="flex:1">❌ 拒绝</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
 }
 
 // ============================================================

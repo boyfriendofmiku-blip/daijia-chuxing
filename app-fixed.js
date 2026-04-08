@@ -1131,6 +1131,7 @@ async function renderDriverMain() {
   }
 
   return '<div class="driver-home has-nav">' +
+    renderDispatchNotification() +
     '<div class="top-bar">' +
       '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<div><div class="greeting" style="font-size:14px;opacity:0.8">代驾司机</div><div class="username" style="font-size:22px;font-weight:700;color:#fff">' + d.name + '</div></div>' +
@@ -1211,6 +1212,7 @@ async function renderOrderHall() {
   }
 
   return '<div class="page"><div class="page-header"><button class="back-btn" data-action="driver-main">←</button><h2>接单大厅</h2><span class="badge badge-warning">' + allOrders.length + ' 个待接</span></div>' +
+    renderDispatchNotification() +
     '<div class="page-content">' + ordersHtml +
       '<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">' +
         '<div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:16px;padding:16px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:space-between" data-action="driver-create-order">' +
@@ -2059,12 +2061,53 @@ async function handleAction(action, dataset) {
     case 'toggle-online': {
       State.driverOnline = !State.driverOnline;
       await DB.setDriverOnline(State.currentUser.id, State.driverOnline);
+      if (State.driverOnline) {
+        startDriverLocationTracking();
+      } else {
+        stopDriverLocationTracking();
+      }
       showToast(State.driverOnline ? '🟢 已上线，开始接单！' : '⚫ 已下线', State.driverOnline ? 'success' : '');
       render();
       break;
     }
 
-    // 司机接单
+    // 司机接单（派单）
+    case 'accept-dispatch': {
+      var dOrderId = dataset.orderId;
+      var dOrder = await DB.getOrderById(dOrderId);
+      if (!dOrder || dOrder.status !== 'pending') {
+        showToast('订单已不存在或已被处理', 'error');
+        render();
+        break;
+      }
+      var dResult = await DB.acceptDispatch(dOrderId, State.currentUser.id);
+      if (dResult && dResult.success) {
+        if (dOrder.userId) addNotification(dOrder.userId, '司机已接单', '您的代驾订单已被司机接单，请等待司机到达。', 'order');
+        addNotification(State.currentUser.id, '接单成功', '您已成功接单，请尽快前往出发地。', 'order');
+        showToast('接单成功！请前往出发地 🚗', 'success');
+        // 清理派单 localStorage
+        localStorage.removeItem('dj_dispatch_for_' + State.currentUser.id);
+        localStorage.removeItem('dj_dispatch_' + dOrderId);
+        navigate('order-detail', { orderId: dOrderId });
+      } else {
+        showToast('接单失败，请重试', 'error');
+        render();
+      }
+      break;
+    }
+
+    // 司机拒绝派单
+    case 'reject-dispatch': {
+      var rOrderId = dataset.orderId;
+      await DB.rejectDispatch(rOrderId, State.currentUser.id);
+      localStorage.removeItem('dj_dispatch_for_' + State.currentUser.id);
+      localStorage.removeItem('dj_dispatch_' + rOrderId);
+      showToast('已拒绝派单', '');
+      render();
+      break;
+    }
+
+    // 司机接单（抢单大厅）
     case 'accept-order': {
       var orderId = dataset.orderId;
       var order = await DB.getOrderById(orderId);

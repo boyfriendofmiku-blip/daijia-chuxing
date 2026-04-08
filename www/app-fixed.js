@@ -639,20 +639,28 @@ function initBackHandler() {
 
   // 监听 Capacitor 的 backButton 事件
   function setupCapacitorBackButton() {
-    if (window.CapacitorApp && window.CapacitorApp.addListener) {
+    if (window.CapacitorApp && typeof window.CapacitorApp.addListener === 'function') {
       window.CapacitorApp.addListener('backButton', function(data) {
         console.log('[Capacitor] backButton pressed');
         if (!goBack()) {
-          // 返回失败（没有历史了），询问是否退出
-          if (confirm('确定要退出应用吗？')) {
-            navigator.app && navigator.app.exitApp();
-          }
+          // 返回失败（没有历史了），尝试退出
+          tryExitApp();
         }
       });
       console.log('[Capacitor] backButton listener registered');
     } else {
-      // Capacitor App 插件未加载，延迟重试
-      setTimeout(setupCapacitorBackButton, 1000);
+      // Capacitor App 插件未加载，延迟重试或监听 ready 事件
+      if (window.CapacitorApp === null) {
+        // 插件加载失败，不重试
+        console.warn('[Capacitor] App 插件不可用，跳过 backButton 监听');
+        return;
+      }
+      // 监听插件加载完成事件
+      window.addEventListener('capacitor-app-ready', setupCapacitorBackButton);
+      // 最多重试 5 秒
+      setTimeout(function() {
+        window.removeEventListener('capacitor-app-ready', setupCapacitorBackButton);
+      }, 5000);
     }
   }
   setupCapacitorBackButton();
@@ -661,6 +669,22 @@ function initBackHandler() {
   window.Android && window.Android.onBackPressed && Android.onBackPressed.registerCallback(function() {
     goBack();
   });
+}
+
+// 尝试退出应用
+function tryExitApp() {
+  if (confirm('确定要退出应用吗？')) {
+    // 尝试使用 Capacitor App 插件退出
+    if (window.CapacitorApp && window.CapacitorApp.exitApp) {
+      window.CapacitorApp.exitApp();
+    } else if (navigator.app && navigator.app.exitApp) {
+      navigator.app.exitApp();
+    } else if (window.Android && window.Android.exitApp) {
+      window.Android.exitApp();
+    } else {
+      window.close();
+    }
+  }
 }
 
 // goBack 返回是否成功（是否有历史可返回）
@@ -2155,15 +2179,7 @@ async function handleAction(action, dataset) {
     case 'go-back': {
       if (!goBack()) {
         // 没有历史记录，显示退出确认
-        if (confirm('确定要退出应用吗？')) {
-          if (navigator.app && navigator.app.exitApp) {
-            navigator.app.exitApp();
-          } else if (window.Android && window.Android.exitApp) {
-            window.Android.exitApp();
-          } else {
-            window.close();
-          }
-        }
+        tryExitApp();
       }
       break;
     }
@@ -2358,52 +2374,50 @@ async function handleAction(action, dataset) {
       var navOrder = await DB.getOrderById(navOrderId);
       console.log('[DEBUG] order data:', navOrder);
       if (!navOrder) { showToast('订单不存在', 'error'); break; }
-      // 优先用目的地坐标打开地图导航，退而使用地址搜索
+      
       var destLat = navOrder.toLat, destLng = navOrder.toLng;
       var destName = navOrder.to || '目的地';
       console.log('[DEBUG] navigation coords:', destLat, destLng, 'destName:', destName);
+      
       var navUrl = '';
       var ua = navigator.userAgent.toLowerCase();
-      var isMobile = /android|iphone|ipad|micromessenger|alipay/.test(ua);
+      var isCapacitor = window.CapacitorApp !== undefined;
+      var isAndroid = /android/.test(ua);
+      var isIOS = /iphone|ipad/.test(ua);
+      var isWechat = /micromessenger/.test(ua);
       
       if (destLat && destLng) {
-        if (/android/.test(ua) && !/micromessenger|alipay/.test(ua)) {
-          // Android 原生 App：用 Intent 打开高德地图
+        if (isAndroid && !isWechat) {
+          // Android 原生 App：用高德 URL Scheme
           navUrl = 'amapuri://navigation?to=' + destLng + ',' + destLat + ',' + encodeURIComponent(destName) + '&callnative=1';
-          // 尝试打开原生 App
-          var link = document.createElement('a');
-          link.href = navUrl;
-          link.id = 'nav-link';
-          document.body.appendChild(link);
-          setTimeout(function() {
-            document.getElementById('nav-link').click();
-            document.body.removeChild(document.getElementById('nav-link'));
-          }, 100);
-          showToast('正在打开高德地图导航...', '');
-        } else if (/iphone|ipad/.test(ua) && !/micromessenger|alipay/.test(ua)) {
+        } else if (isIOS && !isWechat) {
           // iOS：用 URL Scheme 打开高德
           navUrl = 'iosamap://navi?sourceApplication=daijia&lat=' + destLat + '&lon=' + destLng + '&dev=0&style=0';
-          var link2 = document.createElement('a');
-          link2.href = navUrl;
-          link2.id = 'nav-link';
-          document.body.appendChild(link2);
-          setTimeout(function() {
-            document.getElementById('nav-link').click();
-            document.body.removeChild(document.getElementById('nav-link'));
-          }, 100);
-          showToast('正在打开高德地图导航...', '');
         } else {
           // 微信/支付宝/PC浏览器：用网页版
           navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + encodeURIComponent(destName) + '&mode=car&callnative=1';
-          window.open(navUrl, '_blank');
         }
       } else {
         // 没有坐标时使用地址搜索
         navUrl = 'https://uri.amap.com/search?keywords=' + encodeURIComponent(destName);
-        window.open(navUrl, '_blank');
         showToast('订单缺少目的地坐标，已用地址搜索', '');
       }
+      
       console.log('[DEBUG] opening navUrl:', navUrl);
+      
+      // 使用 Capacitor App 插件打开 URL（如果可用）
+      if (isCapacitor && window.CapacitorApp.openUrl) {
+        window.CapacitorApp.openUrl({ url: navUrl }).then(function(result) {
+          console.log('[DEBUG] Capacitor openUrl success:', result);
+        }).catch(function(err) {
+          console.warn('[DEBUG] Capacitor openUrl failed:', err);
+          // fallback 到 window.open
+          window.open(navUrl, '_blank');
+        });
+      } else {
+        // 非 Capacitor 环境
+        window.open(navUrl, '_blank');
+      }
       break;
     }
 

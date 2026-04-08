@@ -73,12 +73,19 @@
     });
   </script>
   
-  <!-- Capacitor App 插件（用于 Android 返回键监听） -->
+  <!-- Capacitor App 插件（用于 Android 返回键和打开外部链接） -->
   <script type="module">
-    // 动态加载 Capacitor App 插件
-    import { App } from 'https://cdn.jsdelivr.net/npm/@capacitor/app@1/dist/esm/index.js';
-    window.CapacitorApp = App;
-    console.log('[Capacitor] App 插件已加载');
+    // 尝试加载 Capacitor App 插件
+    import('https://cdn.jsdelivr.net/npm/@capacitor/app@1/dist/esm/define/index.js')
+      .then(function(module) {
+        window.CapacitorApp = module.App;
+        console.log('[Capacitor] App 插件加载成功');
+        window.dispatchEvent(new CustomEvent('capacitor-app-ready'));
+      })
+      .catch(function(e) {
+        console.warn('[Capacitor] App 插件加载失败:', e);
+        window.CapacitorApp = null;
+      });
   </script>
 </head>
 <body>

@@ -141,7 +141,7 @@ async function renderStaffOrders() {
   }
 
   return '<div class="page staff-page">' +
-    '<div class="staff-top-bar"><button class="back-btn" data-action="staff-main" style="color:#fff">←</button><h2 style="color:#fff">订单管理</h2><div style="width:40px"></div></div>' +
+    '<div class="staff-top-bar"><button class="back-btn" data-action="go-back" style="color:#fff">←</button><h2 style="color:#fff">订单管理</h2><div style="width:40px"></div></div>' +
     '<div class="page-content">' +
       '<div class="staff-filter-bar">' +
         statusFilters.map(function(f) { return '<button class="staff-filter-btn ' + (filterStatus === f.key ? 'active' : '') + '" data-action="staff-filter-orders" data-filter="' + f.key + '">' + f.label + '</button>'; }).join('') +
@@ -186,7 +186,7 @@ async function renderStaffDispatch(targetOrderId) {
   }
 
   return '<div class="page staff-page">' +
-    '<div class="staff-top-bar"><button class="back-btn" data-action="staff-main" style="color:#fff">←</button><h2 style="color:#fff">主动派单</h2><div style="width:40px"></div></div>' +
+    '<div class="staff-top-bar"><button class="back-btn" data-action="go-back" style="color:#fff">←</button><h2 style="color:#fff">主动派单</h2><div style="width:40px"></div></div>' +
     '<div class="page-content">' +
       '<div class="card" style="margin-top:12px"><div class="card-header">📋 Step 1：选择待派订单</div><div class="staff-order-select" id="dispatch-order-select">' + ordersHtml + '</div></div>' +
       '<div class="card" style="margin-top:12px"><div class="card-header">🧑‍✈️ Step 2：选择代驾司机</div><div class="staff-driver-select" id="dispatch-driver-select">' + driversHtml + '</div></div>' +
@@ -220,7 +220,7 @@ async function renderStaffDrivers() {
     });
   }
 
-  return '<div class="page staff-page"><div class="staff-top-bar"><button class="back-btn" data-action="staff-main" style="color:#fff">←</button><h2 style="color:#fff">司机管理</h2><div style="width:40px"></div></div>' +
+  return '<div class="page staff-page"><div class="staff-top-bar"><button class="back-btn" data-action="go-back" style="color:#fff">←</button><h2 style="color:#fff">司机管理</h2><div style="width:40px"></div></div>' +
     '<div class="page-content"><div style="margin-top:12px;color:var(--text-muted);font-size:13px">共 ' + drivers.length + ' 位注册司机</div>' + html + '</div></div>';
 }
 
@@ -247,7 +247,7 @@ async function renderStaffUsers() {
     });
   }
 
-  return '<div class="page staff-page"><div class="staff-top-bar"><button class="back-btn" data-action="staff-main" style="color:#fff">←</button><h2 style="color:#fff">用户管理</h2><div style="width:40px"></div></div>' +
+  return '<div class="page staff-page"><div class="staff-top-bar"><button class="back-btn" data-action="go-back" style="color:#fff">←</button><h2 style="color:#fff">用户管理</h2><div style="width:40px"></div></div>' +
     '<div class="page-content"><div style="margin-top:12px;color:var(--text-muted);font-size:13px">共 ' + users.length + ' 位注册用户</div>' + html + '</div></div>';
 }
 
@@ -300,7 +300,7 @@ async function renderStaffStats() {
     recentHtml += '</div>';
   }
 
-  return '<div class="page staff-page"><div class="staff-top-bar"><button class="back-btn" data-action="staff-main" style="color:#fff">←</button><h2 style="color:#fff">数据统计</h2><div style="width:40px"></div></div>' +
+  return '<div class="page staff-page"><div class="staff-top-bar"><button class="back-btn" data-action="go-back" style="color:#fff">←</button><h2 style="color:#fff">数据统计</h2><div style="width:40px"></div></div>' +
     '<div class="page-content">' +
       '<div class="staff-overview">' +
         '<div class="staff-stat-card accent-green"><div class="staff-stat-num">' + formatPrice(totalRevenue) + '</div><div class="staff-stat-label">总营收</div></div>' +

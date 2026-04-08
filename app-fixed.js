@@ -378,6 +378,8 @@ const State = {
   driverOnline: false,
   reorderFrom: null,
   reorderTo: null,
+  // 页面历史栈（用于返回导航）
+  pageHistory: [],
 };
 
 // ============ 工具函数 ============
@@ -568,13 +570,88 @@ function loadingHtml() {
 }
 
 // ============ 路由（异步） ============
-function navigate(page, params) {
+function navigate(page, params, skipHistory) {
   // 切页时清理实时追踪和到达检测
   stopLiveTracking();
   stopArrivalCheck();
+
+  // 记录页面历史（用于返回）
+  if (!skipHistory && State.currentPage !== page) {
+    State.pageHistory.push({
+      page: State.currentPage,
+      params: State.pageParams
+    });
+  }
+
   State.currentPage = page;
   State.pageParams = params || {};
   render();
+
+  // 更新浏览器历史（支持原生返回按钮）
+  if (!skipHistory) {
+    history.pushState({ page: page, params: params }, '', '#' + page);
+  }
+}
+
+// 返回上一页
+function goBack() {
+  // 清理当前页的追踪
+  stopLiveTracking();
+  stopArrivalCheck();
+
+  if (State.pageHistory.length > 0) {
+    var prev = State.pageHistory.pop();
+    State.currentPage = prev.page;
+    State.pageParams = prev.params || {};
+    history.pushState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
+    render();
+  } else {
+    // 没有历史记录，显示退出确认
+    if (confirm('确定要退出应用吗？')) {
+      // PWA 环境尝试隐藏
+      if (navigator.app && navigator.app.exitApp) {
+        navigator.app.exitApp();
+      } else if (window.Android && window.Android.exitApp) {
+        window.Android.exitApp();
+      } else {
+        // Web 环境尝试关闭
+        window.close();
+      }
+    }
+  }
+}
+
+// 初始化返回键监听
+function initBackHandler() {
+  // 监听浏览器返回键（popstate）
+  window.addEventListener('popstate', function(e) {
+    if (e.state && e.state.page) {
+      // 浏览器返回时，从历史记录恢复
+      stopLiveTracking();
+      stopArrivalCheck();
+      State.currentPage = e.state.page;
+      State.pageParams = e.state.params || {};
+      // 从本地历史栈同步
+      if (State.pageHistory.length > 0) {
+        State.pageHistory.pop();
+      }
+      render();
+    } else if (State.pageHistory.length > 0) {
+      // 没有 state 但有本地历史，执行返回
+      goBack();
+    }
+  });
+
+  // 监听 Android 返回键（通过 Capacitor 或自定义事件）
+  document.addEventListener('backbutton', function(e) {
+    e.preventDefault();
+    goBack();
+  });
+
+  // 监听 Android APP 的返回键（某些 WebView）
+  window.Android && window.Android.onBackPressed && Android.onBackPressed.registerCallback(function() {
+    goBack();
+  });
 }
 
 async function render() {
@@ -841,7 +918,7 @@ function renderCreateOrder() {
   }
 
   return '<div class="page">' +
-    '<div class="page-header"><button class="back-btn" data-action="user-main">←</button><h2>叫代驾</h2></div>' +
+    '<div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>叫代驾</h2></div>' +
     '<div class="page-content">' +
       '<div class="map-container" id="order-map-container">' +
         '<div id="order-map" class="map-canvas"></div>' +
@@ -1080,7 +1157,7 @@ async function renderUserOrders() {
   }
 
   return '<div class="page">' +
-    '<div class="page-header"><button class="back-btn" data-action="user-main">←</button><h2>我的订单</h2></div>' +
+    '<div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>我的订单</h2></div>' +
     '<div class="page-content">' +
       '<div class="filter-tabs">' +
         tabs.map(function(t) { return '<div class="filter-tab ' + (filter === t.key ? 'active' : '') + '" data-action="user-orders" data-filter="' + t.key + '">' + t.label + '</div>'; }).join('') +
@@ -1167,7 +1244,7 @@ async function renderDriverMain() {
 // ============================================================
 async function renderOrderHall() {
   if (!State.driverOnline) {
-    return '<div class="page"><div class="page-header"><button class="back-btn" data-action="driver-main">←</button><h2>接单大厅</h2></div>' +
+    return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>接单大厅</h2></div>' +
       '<div class="page-content"><div class="empty-state"><div class="empty-icon">⚫</div><p>请先上线才能查看订单</p><button class="btn btn-secondary" data-action="toggle-online" style="margin-top:16px;background:#2C3E50">立即上线</button></div></div></div>';
   }
 
@@ -1211,7 +1288,7 @@ async function renderOrderHall() {
     });
   }
 
-  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="driver-main">←</button><h2>接单大厅</h2><span class="badge badge-warning">' + allOrders.length + ' 个待接</span></div>' +
+  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>接单大厅</h2><span class="badge badge-warning">' + allOrders.length + ' 个待接</span></div>' +
     renderDispatchNotification() +
     '<div class="page-content">' + ordersHtml +
       '<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">' +
@@ -1295,7 +1372,7 @@ async function renderDriverOrders() {
     });
   }
 
-  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="driver-main">←</button><h2>我的订单</h2></div>' +
+  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>我的订单</h2></div>' +
     '<div class="page-content">' +
       '<div class="filter-tabs">' +
         tabs.map(function(t) { return '<div class="filter-tab ' + (filter === t.key ? 'active' : '') + '" data-action="driver-orders" data-filter="' + t.key + '">' + t.label + '</div>'; }).join('') +
@@ -2038,6 +2115,7 @@ async function handleAction(action, dataset) {
     case 'about':       navigate('about'); break;
     case 'manage-addresses': navigate('manage-addresses'); break;
     case 'logout':      logout(); break;
+    case 'go-back':     goBack(); break;
     case 'clear-data':  clearLocalData(); break;
     case 'delete-address': {
       var idx = parseInt(dataset.addrIdx);
@@ -2754,6 +2832,7 @@ function startRealtime() {
 //  初始化
 // ============================================================
 function _startApp() {
+  initBackHandler();
   startRealtime();
   navigate('home');
 }

@@ -1,7 +1,7 @@
 {
-  "version": "1.2.0",
-  "buildTime": "2026-04-08T15:26:00+08:00",
-  "changelog": "修复APK定位权限问题，优化权限引导体验",
+  "version": "1.3.0",
+  "buildTime": "2026-04-08T16:20:00+08:00",
+  "changelog": "新增注册/登录短信验证码功能，支持密码登录和验证码登录",
   "files": [
     "app-fixed.js",
     "staff.js",

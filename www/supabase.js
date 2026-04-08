@@ -394,6 +394,41 @@ const DB = {
         callback(payload);
       })
       .subscribe();
+  },
+
+  // ============ 短信验证码 ============
+  // 发送验证码
+  async sendSMS(phone, type = 'register', role = 'passenger') {
+    try {
+      var resp = await fetch(SUPABASE_URL + '/functions/v1/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone, type: type, role: role })
+      });
+      var data = await resp.json();
+      if (data.error) return { error: data.error };
+      return { success: true, dev_mode: data.dev_mode, code: data.code, message: data.message };
+    } catch(e) {
+      console.error('sendSMS error:', e);
+      return { error: '网络错误，请检查网络连接' };
+    }
+  },
+
+  // 验证验证码
+  async verifySMSCode(phone, code, type = 'register') {
+    try {
+      var resp = await fetch(SUPABASE_URL + '/functions/v1/verify-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone, code: code, type: type })
+      });
+      var data = await resp.json();
+      if (data.error) return { valid: false, error: data.error };
+      return { valid: true, role: data.role };
+    } catch(e) {
+      console.error('verifySMSCode error:', e);
+      return { valid: false, error: '网络错误，请检查网络连接' };
+    }
   }
 };
 

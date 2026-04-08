@@ -413,16 +413,31 @@ const DB = {
   // ============ 司机位置 ============
   async updateDriverLocation(driverId, lat, lng, accuracy) {
     try {
-      const { error } = await sb()
+      var driverIdInt = parseInt(driverId);
+      // 先尝试更新现有记录
+      var { error: updateErr } = await sb()
         .from('driver_locations')
-        .upsert({
-          driver_id: parseInt(driverId),
+        .update({
           lat: parseFloat(lat),
           lng: parseFloat(lng),
           accuracy: parseFloat(accuracy || 0),
           updated_at: new Date().toISOString()
-        });
-      if (error) console.error('updateDriverLocation error:', error);
+        })
+        .eq('driver_id', driverIdInt);
+      
+      if (updateErr) {
+        // 更新失败（可能记录不存在），尝试插入
+        var { error: insertErr } = await sb()
+          .from('driver_locations')
+          .insert({
+            driver_id: driverIdInt,
+            lat: parseFloat(lat),
+            lng: parseFloat(lng),
+            accuracy: parseFloat(accuracy || 0),
+            updated_at: new Date().toISOString()
+          });
+        if (insertErr) console.warn('updateDriverLocation error:', insertErr);
+      }
     } catch(e) { console.warn('updateDriverLocation exception:', e); }
   },
 

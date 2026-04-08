@@ -2318,28 +2318,50 @@ async function handleAction(action, dataset) {
       if (!navOrder) { showToast('订单不存在', 'error'); break; }
       // 优先用目的地坐标打开地图导航，退而使用地址搜索
       var destLat = navOrder.toLat, destLng = navOrder.toLng;
-      var destName = encodeURIComponent(navOrder.to || '目的地');
+      var destName = navOrder.to || '目的地';
       console.log('[DEBUG] navigation coords:', destLat, destLng, 'destName:', destName);
       var navUrl = '';
       var ua = navigator.userAgent.toLowerCase();
+      var isMobile = /android|iphone|ipad|micromessenger|alipay/.test(ua);
+      
       if (destLat && destLng) {
-        if (/micromessenger|alipay/.test(ua)) {
-          // 微信/支付宝内：高德地图网页版
-          navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + destName + '&mode=car&callnative=1';
-        } else if (/android/.test(ua)) {
-          navUrl = 'intent://navigation?to=' + destLng + ',' + destLat + ',' + destName + '&callnative=1#Intent;scheme=amapuri;package=com.autonavi.minimap;end';
-        } else if (/iphone|ipad/.test(ua)) {
+        if (/android/.test(ua) && !/micromessenger|alipay/.test(ua)) {
+          // Android 原生 App：用 Intent 打开高德地图
+          navUrl = 'amapuri://navigation?to=' + destLng + ',' + destLat + ',' + encodeURIComponent(destName) + '&callnative=1';
+          // 尝试打开原生 App
+          var link = document.createElement('a');
+          link.href = navUrl;
+          link.id = 'nav-link';
+          document.body.appendChild(link);
+          setTimeout(function() {
+            document.getElementById('nav-link').click();
+            document.body.removeChild(document.getElementById('nav-link'));
+          }, 100);
+          showToast('正在打开高德地图导航...', '');
+        } else if (/iphone|ipad/.test(ua) && !/micromessenger|alipay/.test(ua)) {
+          // iOS：用 URL Scheme 打开高德
           navUrl = 'iosamap://navi?sourceApplication=daijia&lat=' + destLat + '&lon=' + destLng + '&dev=0&style=0';
+          var link2 = document.createElement('a');
+          link2.href = navUrl;
+          link2.id = 'nav-link';
+          document.body.appendChild(link2);
+          setTimeout(function() {
+            document.getElementById('nav-link').click();
+            document.body.removeChild(document.getElementById('nav-link'));
+          }, 100);
+          showToast('正在打开高德地图导航...', '');
         } else {
-          navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + destName + '&mode=car&callnative=1';
+          // 微信/支付宝/PC浏览器：用网页版
+          navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + encodeURIComponent(destName) + '&mode=car&callnative=1';
+          window.open(navUrl, '_blank');
         }
       } else {
         // 没有坐标时使用地址搜索
-        navUrl = 'https://uri.amap.com/search?keywords=' + destName;
+        navUrl = 'https://uri.amap.com/search?keywords=' + encodeURIComponent(destName);
+        window.open(navUrl, '_blank');
         showToast('订单缺少目的地坐标，已用地址搜索', '');
       }
       console.log('[DEBUG] opening navUrl:', navUrl);
-      window.open(navUrl, '_blank');
       break;
     }
 

@@ -607,19 +607,6 @@ function goBack() {
     console.log('[DEBUG] goBack navigating to:', prev.page);
     history.pushState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
     render();
-  } else {
-    // 没有历史记录，显示退出确认
-    if (confirm('确定要退出应用吗？')) {
-      // PWA 环境尝试隐藏
-      if (navigator.app && navigator.app.exitApp) {
-        navigator.app.exitApp();
-      } else if (window.Android && window.Android.exitApp) {
-        window.Android.exitApp();
-      } else {
-        // Web 环境尝试关闭
-        window.close();
-      }
-    }
   }
 }
 
@@ -644,16 +631,57 @@ function initBackHandler() {
     }
   });
 
-  // 监听 Android 返回键（通过 Capacitor 或自定义事件）
+  // 监听 Cordova/PhoneGap 的 backbutton 事件
   document.addEventListener('backbutton', function(e) {
     e.preventDefault();
     goBack();
   });
 
-  // 监听 Android APP 的返回键（某些 WebView）
+  // 监听 Capacitor 的 backButton 事件
+  function setupCapacitorBackButton() {
+    if (window.CapacitorApp && window.CapacitorApp.addListener) {
+      window.CapacitorApp.addListener('backButton', function(data) {
+        console.log('[Capacitor] backButton pressed');
+        if (!goBack()) {
+          // 返回失败（没有历史了），询问是否退出
+          if (confirm('确定要退出应用吗？')) {
+            navigator.app && navigator.app.exitApp();
+          }
+        }
+      });
+      console.log('[Capacitor] backButton listener registered');
+    } else {
+      // Capacitor App 插件未加载，延迟重试
+      setTimeout(setupCapacitorBackButton, 1000);
+    }
+  }
+  setupCapacitorBackButton();
+
+  // 监听 Android WebView 的 onBackPressed
   window.Android && window.Android.onBackPressed && Android.onBackPressed.registerCallback(function() {
     goBack();
   });
+}
+
+// goBack 返回是否成功（是否有历史可返回）
+function goBack() {
+  console.log('[DEBUG] goBack called. pageHistory length:', State.pageHistory.length, 'currentPage:', State.currentPage);
+  // 清理当前页的追踪
+  stopLiveTracking();
+  stopArrivalCheck();
+
+  if (State.pageHistory.length > 0) {
+    var prev = State.pageHistory.pop();
+    State.currentPage = prev.page;
+    State.pageParams = prev.params || {};
+    console.log('[DEBUG] goBack navigating to:', prev.page);
+    history.pushState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
+    render();
+    return true; // 返回成功
+  } else {
+    // 没有历史记录，返回 false 让调用者决定是否退出
+    return false;
+  }
 }
 
 async function render() {
@@ -2124,7 +2152,21 @@ async function handleAction(action, dataset) {
     case 'about':       navigate('about'); break;
     case 'manage-addresses': navigate('manage-addresses'); break;
     case 'logout':      logout(); break;
-    case 'go-back':     goBack(); break;
+    case 'go-back': {
+      if (!goBack()) {
+        // 没有历史记录，显示退出确认
+        if (confirm('确定要退出应用吗？')) {
+          if (navigator.app && navigator.app.exitApp) {
+            navigator.app.exitApp();
+          } else if (window.Android && window.Android.exitApp) {
+            window.Android.exitApp();
+          } else {
+            window.close();
+          }
+        }
+      }
+      break;
+    }
     case 'check-update': {
       var statusEl = document.getElementById('update-status');
       if (statusEl) statusEl.innerHTML = '<span style="color:var(--primary)">正在检查更新...</span>';

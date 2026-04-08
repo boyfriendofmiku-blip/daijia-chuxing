@@ -72,6 +72,14 @@
       window.__useLocalStorage = true;
     });
   </script>
+  
+  <!-- Capacitor App 插件（用于 Android 返回键监听） -->
+  <script type="module">
+    // 动态加载 Capacitor App 插件
+    import { App } from 'https://cdn.jsdelivr.net/npm/@capacitor/app@1/dist/esm/index.js';
+    window.CapacitorApp = App;
+    console.log('[Capacitor] App 插件已加载');
+  </script>
 </head>
 <body>
   <div id="app">

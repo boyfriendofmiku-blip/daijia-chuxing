@@ -32,6 +32,10 @@ jobs:
           cp index.html www/
           cp app-fixed.js www/
           cp staff.js www/
+          cp amap-adapter.js www/ 2>/dev/null || true
+          cp supabase.js www/ 2>/dev/null || true
+          cp updater.js www/ 2>/dev/null || true
+          cp version.json www/ 2>/dev/null || true
           cp style.css www/
           cp sw.js www/
           cp manifest.json www/
@@ -44,6 +48,14 @@ jobs:
 
       - name: Add Android platform
         run: npx cap add android
+
+      - name: Inject Android permissions into AndroidManifest.xml
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          # 注入定位权限（精确 + 粗略 + 后台）
+          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />|' "$MANIFEST"
+          echo "=== AndroidManifest.xml (权限部分) ==="
+          grep -A2 'permission' "$MANIFEST" | head -20
 
       - name: Sync web assets to Android
         run: npx cap sync android

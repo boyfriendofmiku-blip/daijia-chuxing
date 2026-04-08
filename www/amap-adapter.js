@@ -640,9 +640,17 @@ function showGeoPermissionTip() {
   var isIOS = /iphone|ipad|ipod/.test(ua);
   var isWechat = /micromessenger/.test(ua);
   var isAndroid = /android/.test(ua);
+  // 判断是否在 Capacitor 原生 APP 中运行
+  var isCapacitor = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
   var guide = '';
-  if (isWechat) {
+  var showSettingsBtn = false;
+
+  if (isCapacitor && isAndroid) {
+    // Capacitor APK 环境：引导进系统设置
+    guide = '请前往手机「设置 → 应用管理 → 代驾出行 → 权限 → 位置」，开启「仅使用期间允许」';
+    showSettingsBtn = true;
+  } else if (isWechat) {
     guide = '请点击右上角菜单 → 在浏览器中打开，然后允许位置权限';
   } else if (isIOS) {
     guide = '前往「设置」→「Safari」→「位置」→ 选择「询问」或「允许」';
@@ -651,6 +659,10 @@ function showGeoPermissionTip() {
   } else {
     guide = '请在浏览器地址栏左侧点击🔒图标，开启「位置」权限';
   }
+
+  var settingsBtnHtml = showSettingsBtn
+    ? '<button id="geo-tip-settings" style="flex:1;padding:8px;border:none;border-radius:8px;background:linear-gradient(135deg,#1a73e8,#0d47a1);color:#fff;font-size:13px;cursor:pointer;font-weight:600">去设置开启</button>'
+    : '';
 
   var tip = document.createElement('div');
   tip.id = 'geo-perm-tip';
@@ -665,27 +677,46 @@ function showGeoPermissionTip() {
         '<div style="font-size:13px;color:#666;line-height:1.5">' + guide + '</div>' +
         '<div style="margin-top:10px;display:flex;gap:8px">' +
           '<button id="geo-tip-skip" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;background:#f8f8f8;font-size:13px;cursor:pointer">稍后再说</button>' +
-          '<button id="geo-tip-manual" style="flex:1;padding:8px;border:none;border-radius:8px;background:linear-gradient(135deg,#E8572A,#ff8c42);color:#fff;font-size:13px;cursor:pointer;font-weight:600">手动输入地址</button>' +
+          (settingsBtnHtml ||
+          '<button id="geo-tip-manual" style="flex:1;padding:8px;border:none;border-radius:8px;background:linear-gradient(135deg,#E8572A,#ff8c42);color:#fff;font-size:13px;cursor:pointer;font-weight:600">手动输入地址</button>') +
         '</div>' +
       '</div>' +
     '</div>';
 
   document.body.appendChild(tip);
 
-  // 关闭按钮
-  var skipBtn = document.getElementById('geo-tip-skip');
-  var manualBtn = document.getElementById('geo-tip-manual');
-  
   function closeTip() {
     tip.style.animation = 'slideDown 0.25s ease';
     setTimeout(function() { if (tip.parentNode) tip.remove(); }, 250);
   }
 
+  var skipBtn = document.getElementById('geo-tip-skip');
+  var manualBtn = document.getElementById('geo-tip-manual');
+  var settingsBtn = document.getElementById('geo-tip-settings');
+
   if (skipBtn) skipBtn.addEventListener('click', closeTip);
+
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', function() {
+      closeTip();
+      // Capacitor 原生跳转系统应用设置页
+      try {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+          // 使用 @capacitor/app 打开设置（无需额外插件）
+          window.location.href = 'app-settings:';
+        } else {
+          // 降级：提示用户手动去设置
+          alert('请前往手机「设置 → 应用管理 → 代驾出行 → 权限 → 位置」，开启位置权限后返回应用');
+        }
+      } catch(e) {
+        alert('请前往手机「设置 → 应用管理 → 代驾出行 → 权限 → 位置」，开启位置权限后返回应用');
+      }
+    });
+  }
+
   if (manualBtn) {
     manualBtn.addEventListener('click', function() {
       closeTip();
-      // 聚焦到出发地输入框
       var fromInput = document.getElementById('order-from');
       if (fromInput) {
         fromInput.focus();
@@ -694,7 +725,7 @@ function showGeoPermissionTip() {
     });
   }
 
-  // 5秒后自动消失
+  // 8秒后自动消失
   setTimeout(closeTip, 8000);
 }
 

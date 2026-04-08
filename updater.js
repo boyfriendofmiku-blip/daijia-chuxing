@@ -9,7 +9,7 @@
   var UPDATE_SERVER = 'https://daijia-chuxing.vercel.app';
   var VERSION_URL   = UPDATE_SERVER + '/version.json';
   // 当前内置版本（每次打APK时更新这里）
-  var CURRENT_VERSION = '1.1.0';
+  var CURRENT_VERSION = '2.2.0';
   // 本地存储的版本号 key
   var STORED_VER_KEY  = 'dj_cached_version';
   // 检查间隔：启动时 + 每30分钟

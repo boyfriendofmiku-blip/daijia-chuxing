@@ -1513,7 +1513,11 @@ function renderFeedback() {
 function renderAbout() {
   return '<div class="page"><div class="page-header"><button class="back-btn" data-action="profile">←</button><h2>关于</h2></div>' +
     '<div class="page-content">' +
-      '<div style="text-align:center;padding:32px 0 24px"><div style="font-size:56px;margin-bottom:12px">🚗</div><div style="font-size:22px;font-weight:700">代驾出行</div><div style="font-size:13px;color:var(--text-muted);margin-top:6px">安全 · 快捷 · 专业</div><div style="font-size:12px;color:var(--text-muted);margin-top:12px;padding:4px 12px;background:var(--bg);border-radius:12px;display:inline-block">v2.0.0 · 云端同步</div></div>' +
+      '<div style="text-align:center;padding:32px 0 24px"><div style="font-size:56px;margin-bottom:12px">🚗</div><div style="font-size:22px;font-weight:700">代驾出行</div><div style="font-size:13px;color:var(--text-muted);margin-top:6px">安全 · 快捷 · 专业</div><div style="font-size:12px;color:var(--text-muted);margin-top:12px;padding:4px 12px;background:var(--bg);border-radius:12px;display:inline-block">' + (window.APP_VERSION || 'v2.0.0') + ' · 云端同步</div></div>' +
+      '<div class="card"><div class="card-header">🔄 检查更新</div>' +
+        '<div style="padding:8px 0"><button class="btn btn-outline btn-block" id="check-update-btn" data-action="check-update">🆙 检查更新</button></div>' +
+        '<div id="update-status" style="text-align:center;font-size:13px;color:var(--text-muted);padding:8px 0"></div>' +
+      '</div>' +
       '<div class="card"><div class="card-header">🛡️ 服务保障</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
         '<div style="text-align:center;padding:12px;background:var(--bg);border-radius:10px"><div style="font-size:24px;margin-bottom:4px">🛡️</div><div style="font-size:13px;font-weight:600">安全保障</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">全程保险护航</div></div>' +
         '<div style="text-align:center;padding:12px;background:var(--bg);border-radius:10px"><div style="font-size:24px;margin-bottom:4px">🧑‍✈️</div><div style="font-size:13px;font-weight:600">专业司机</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">严格筛选培训</div></div>' +
@@ -2116,6 +2120,24 @@ async function handleAction(action, dataset) {
     case 'manage-addresses': navigate('manage-addresses'); break;
     case 'logout':      logout(); break;
     case 'go-back':     goBack(); break;
+    case 'check-update': {
+      var statusEl = document.getElementById('update-status');
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--primary)">正在检查更新...</span>';
+      if (window.__djCheckUpdate) {
+        window.__djCheckUpdate();
+        setTimeout(function() {
+          var el = document.getElementById('update-status');
+          if (el) el.innerHTML = '<span style="color:var(--success)">✓ 已完成最新检查</span>';
+          setTimeout(function() {
+            var el2 = document.getElementById('update-status');
+            if (el2) el2.innerHTML = '';
+          }, 3000);
+        }, 3000);
+      } else {
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">更新服务暂不可用</span>';
+      }
+      break;
+    }
     case 'clear-data':  clearLocalData(); break;
     case 'delete-address': {
       var idx = parseInt(dataset.addrIdx);

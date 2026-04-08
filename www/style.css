@@ -166,11 +166,11 @@ select.form-control { cursor: pointer; }
 .auth-link a:hover { text-decoration: underline; }
 
 /* 3栏认证标签页 */
-.auth-tabs-3 { gap: 0; }
-.auth-tabs-3 .auth-tab { flex: 1; font-size: 12px; padding: 8px 4px; }
+.auth-tabs-2 { gap: 0; }
+.auth-tabs-2 .auth-tab { flex: 1; font-size: 13px; padding: 10px 4px; }
 
 /* 验证码发送按钮状态 */
-.sms-send-btn:disabled { opacity: 0.6; cursor: not-allowed; color: var(--text-muted) !important; border-color: var(--border) !important; }
+
 
 /* ===== 分隔线 ===== */
 .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }

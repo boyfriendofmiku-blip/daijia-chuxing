@@ -676,14 +676,13 @@ function renderHome() {
 // ============================================================
 function renderUserAuth() {
   var tab = State.pageParams && State.pageParams.tab ? State.pageParams.tab : 'login';
-  if (!['login','sms-login','register'].includes(tab)) tab = 'login';
+  if (!['login','register'].includes(tab)) tab = 'login';
 
   return '<div class="auth-page page">' +
     '<div class="auth-hero"><div class="icon">👤</div><h1>乘客端</h1></div>' +
     '<div class="auth-body"><div class="auth-card">' +
-      '<div class="auth-tabs auth-tabs-3">' +
-        '<button class="auth-tab ' + (tab === 'login' ? 'active' : '') + '" data-tab="login">密码登录</button>' +
-        '<button class="auth-tab ' + (tab === 'sms-login' ? 'active' : '') + '" data-tab="sms-login">验证码登录</button>' +
+      '<div class="auth-tabs auth-tabs-2">' +
+        '<button class="auth-tab ' + (tab === 'login' ? 'active' : '') + '" data-tab="login">登录</button>' +
         '<button class="auth-tab ' + (tab === 'register' ? 'active' : '') + '" data-tab="register">注册</button>' +
       '</div>' +
 
@@ -692,24 +691,8 @@ function renderUserAuth() {
         '<div class="form-group"><label>密码</label><input class="form-control" type="password" id="login-pwd" placeholder="请输入密码" /></div>' +
         '<button class="btn btn-primary btn-block" type="submit">登录</button>' +
         '<div class="auth-link">还没有账号？<a data-tab="register">立即注册</a></div>' +
-      '</form>' : tab === 'sms-login' ? '<form id="sms-login-form">' +
-        '<div class="form-group"><label>手机号</label><input class="form-control" type="tel" id="smslogin-phone" placeholder="请输入手机号" maxlength="11" /></div>' +
-        '<div class="form-group"><label>验证码</label>' +
-          '<div style="display:flex;gap:8px;align-items:center">' +
-            '<input class="form-control" type="text" id="smslogin-code" placeholder="请输入验证码" maxlength="6" style="flex:1" />' +
-            '<button class="btn btn-outline sms-send-btn" type="button" id="smslogin-send-btn" style="white-space:nowrap;min-width:100px">发送验证码</button>' +
-          '</div>' +
-        '</div>' +
-        '<button class="btn btn-primary btn-block" type="submit">验证码登录</button>' +
-        '<div class="auth-link">还没有账号？<a data-tab="register">立即注册</a></div>' +
       '</form>' : '<form id="register-form">' +
         '<div class="form-group"><label>手机号</label><input class="form-control" type="tel" id="reg-phone" placeholder="请输入手机号" maxlength="11" /></div>' +
-        '<div class="form-group"><label>验证码</label>' +
-          '<div style="display:flex;gap:8px;align-items:center">' +
-            '<input class="form-control" type="text" id="reg-code" placeholder="请输入验证码" maxlength="6" style="flex:1" />' +
-            '<button class="btn btn-outline sms-send-btn" type="button" id="reg-send-btn" style="white-space:nowrap;min-width:100px">发送验证码</button>' +
-          '</div>' +
-        '</div>' +
         '<div class="form-group"><label>昵称</label><input class="form-control" type="text" id="reg-name" placeholder="请输入昵称" /></div>' +
         '<div class="form-group"><label>密码</label><input class="form-control" type="password" id="reg-pwd" placeholder="请设置密码（至少6位）" /></div>' +
         '<div class="form-group"><label>确认密码</label><input class="form-control" type="password" id="reg-pwd2" placeholder="请再次输入密码" /></div>' +
@@ -726,14 +709,13 @@ function renderUserAuth() {
 // ============================================================
 function renderDriverAuth() {
   var tab = State.pageParams && State.pageParams.tab ? State.pageParams.tab : 'login';
-  if (!['login','sms-login','register'].includes(tab)) tab = 'login';
+  if (!['login','register'].includes(tab)) tab = 'login';
 
   return '<div class="auth-page page" style="background:linear-gradient(180deg,#2C3E50 0%,#2C3E50 200px,var(--bg) 200px)">' +
     '<div class="auth-hero" style="background:transparent"><div class="icon">🧑‍✈️</div><h1>司机端</h1></div>' +
     '<div class="auth-body"><div class="auth-card">' +
-      '<div class="auth-tabs auth-tabs-3">' +
-        '<button class="auth-tab ' + (tab === 'login' ? 'active' : '') + '" data-tab="login">密码登录</button>' +
-        '<button class="auth-tab ' + (tab === 'sms-login' ? 'active' : '') + '" data-tab="sms-login">验证码登录</button>' +
+      '<div class="auth-tabs auth-tabs-2">' +
+        '<button class="auth-tab ' + (tab === 'login' ? 'active' : '') + '" data-tab="login">登录</button>' +
         '<button class="auth-tab ' + (tab === 'register' ? 'active' : '') + '" data-tab="register">注册</button>' +
       '</div>' +
 
@@ -742,24 +724,8 @@ function renderDriverAuth() {
         '<div class="form-group"><label>密码</label><input class="form-control" type="password" id="dlogin-pwd" placeholder="请输入密码" /></div>' +
         '<button class="btn btn-secondary btn-block" type="submit" style="background:#2C3E50">登录</button>' +
         '<div class="auth-link">还没有账号？<a data-tab="register">立即注册</a></div>' +
-      '</form>' : tab === 'sms-login' ? '<form id="driver-sms-login-form">' +
-        '<div class="form-group"><label>手机号</label><input class="form-control" type="tel" id="dsmslogin-phone" placeholder="请输入手机号" maxlength="11" /></div>' +
-        '<div class="form-group"><label>验证码</label>' +
-          '<div style="display:flex;gap:8px;align-items:center">' +
-            '<input class="form-control" type="text" id="dsmslogin-code" placeholder="请输入验证码" maxlength="6" style="flex:1" />' +
-            '<button class="btn btn-outline sms-send-btn" type="button" id="dsmslogin-send-btn" style="white-space:nowrap;min-width:100px;border-color:#2C3E50;color:#2C3E50">发送验证码</button>' +
-          '</div>' +
-        '</div>' +
-        '<button class="btn btn-block" type="submit" style="background:#2C3E50;color:#fff">验证码登录</button>' +
-        '<div class="auth-link">还没有账号？<a data-tab="register">立即注册</a></div>' +
       '</form>' : '<form id="driver-register-form">' +
         '<div class="form-group"><label>手机号</label><input class="form-control" type="tel" id="dreg-phone" placeholder="请输入手机号" maxlength="11" /></div>' +
-        '<div class="form-group"><label>验证码</label>' +
-          '<div style="display:flex;gap:8px;align-items:center">' +
-            '<input class="form-control" type="text" id="dreg-code" placeholder="请输入验证码" maxlength="6" style="flex:1" />' +
-            '<button class="btn btn-outline sms-send-btn" type="button" id="dreg-send-btn" style="white-space:nowrap;min-width:100px;border-color:#2C3E50;color:#2C3E50">发送验证码</button>' +
-          '</div>' +
-        '</div>' +
         '<div class="form-group"><label>真实姓名</label><input class="form-control" type="text" id="dreg-name" placeholder="请输入真实姓名" /></div>' +
         '<div class="form-group"><label>驾驶证号</label><input class="form-control" type="text" id="dreg-license" placeholder="请输入驾驶证号" /></div>' +
         '<div class="form-group"><label>密码</label><input class="form-control" type="password" id="dreg-pwd" placeholder="请设置密码（至少6位）" /></div>' +
@@ -1546,7 +1512,7 @@ function bindEvents() {
     });
   });
 
-  // Tab 切换（支持 login / sms-login / register）
+  // Tab 切换（支持 login / register）
   document.querySelectorAll('[data-tab]').forEach(function(el) {
     el.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -1578,28 +1544,6 @@ function bindEvents() {
     });
   }
 
-  // ===== 用户验证码登录 =====
-  var smsLoginForm = document.getElementById('sms-login-form');
-  if (smsLoginForm) {
-    smsLoginForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
-      var phone = document.getElementById('smslogin-phone').value.trim();
-      var code = document.getElementById('smslogin-code').value.trim();
-      if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的手机号', 'error'); return; }
-      if (!code || code.length !== 6) { showToast('请输入6位验证码', 'error'); return; }
-      showLoading('验证中...');
-      var vr = await DB.verifySMSCode(phone, code, 'login');
-      hideLoading();
-      if (!vr.valid) { showToast(vr.error || '验证码错误', 'error'); return; }
-      var user = await DB.findUserByPhone(phone, 'passenger');
-      if (!user) { showToast('该手机号未注册，请先注册', 'error'); return; }
-      State.currentUser = { id: user.id, name: user.name, phone: user.phone, type: 'user', createdAt: user.createdAt };
-      showToast('登录成功，欢迎回来 ' + user.name, 'success');
-      requestNotificationPermission();
-      navigate('user-main');
-    });
-  }
-
   // ===== 用户注册（异步） =====
   var regForm = document.getElementById('register-form');
   if (regForm) {
@@ -1607,17 +1551,13 @@ function bindEvents() {
       e.preventDefault();
       var name = document.getElementById('reg-name').value.trim();
       var phone = document.getElementById('reg-phone').value.trim();
-      var code = document.getElementById('reg-code').value.trim();
       var pwd = document.getElementById('reg-pwd').value;
       var pwd2 = document.getElementById('reg-pwd2').value;
       if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的手机号', 'error'); return; }
-      if (!code || code.length !== 6) { showToast('请输入6位验证码', 'error'); return; }
       if (!name) { showToast('请输入昵称', 'error'); return; }
       if (pwd.length < 6) { showToast('密码至少6位', 'error'); return; }
       if (pwd !== pwd2) { showToast('两次密码不一致', 'error'); return; }
       showLoading('注册中...');
-      var vr = await DB.verifySMSCode(phone, code, 'register');
-      if (!vr.valid) { hideLoading(); showToast(vr.error || '验证码错误', 'error'); return; }
       var result = await DB.registerUser({ name: name, phone: phone, pwd: pwd, role: 'passenger' });
       hideLoading();
       if (result.error) { showToast(result.error, 'error'); return; }
@@ -1643,109 +1583,7 @@ function bindEvents() {
     });
   }
 
-  // ===== 司机验证码登录 =====
-  var dSmsLoginForm = document.getElementById('driver-sms-login-form');
-  if (dSmsLoginForm) {
-    dSmsLoginForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
-      var phone = document.getElementById('dsmslogin-phone').value.trim();
-      var code = document.getElementById('dsmslogin-code').value.trim();
-      if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的手机号', 'error'); return; }
-      if (!code || code.length !== 6) { showToast('请输入6位验证码', 'error'); return; }
-      showLoading('验证中...');
-      var vr = await DB.verifySMSCode(phone, code, 'login');
-      hideLoading();
-      if (!vr.valid) { showToast(vr.error || '验证码错误', 'error'); return; }
-      var driver = await DB.findUserByPhone(phone, 'driver');
-      if (!driver) { showToast('该手机号未注册为司机，请先注册', 'error'); return; }
-      State.currentUser = { id: driver.id, name: driver.name, phone: driver.phone, license: driver.license || driver.car_plate, type: 'driver', rating: driver.rating, createdAt: driver.createdAt };
-      showToast('登录成功，欢迎 ' + driver.name, 'success');
-      requestNotificationPermission();
-      navigate('driver-main');
-    });
-  }
-
   // ===== 司机注册（异步） =====
-  var dRegForm = document.getElementById('driver-register-form');
-  if (dRegForm) {
-    dRegForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
-      var name = document.getElementById('dreg-name').value.trim();
-      var phone = document.getElementById('dreg-phone').value.trim();
-      var code = document.getElementById('dreg-code').value.trim();
-      var license = document.getElementById('dreg-license').value.trim();
-      var pwd = document.getElementById('dreg-pwd').value;
-      var pwd2 = document.getElementById('dreg-pwd2').value;
-      if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的手机号', 'error'); return; }
-      if (!code || code.length !== 6) { showToast('请输入6位验证码', 'error'); return; }
-      if (!name) { showToast('请输入真实姓名', 'error'); return; }
-      if (!license) { showToast('请输入驾驶证号', 'error'); return; }
-      if (pwd.length < 6) { showToast('密码至少6位', 'error'); return; }
-      if (pwd !== pwd2) { showToast('两次密码不一致', 'error'); return; }
-      showLoading('注册中...');
-      var vr = await DB.verifySMSCode(phone, code, 'register');
-      if (!vr.valid) { hideLoading(); showToast(vr.error || '验证码错误', 'error'); return; }
-      var result = await DB.registerUser({ name: name, phone: phone, pwd: pwd, role: 'driver', license: license });
-      hideLoading();
-      if (result.error) { showToast(result.error, 'error'); return; }
-      State.currentUser = { id: result.id, name: result.name, phone: result.phone, license: license, type: 'driver', rating: '4.9', createdAt: result.createdAt };
-      showToast('注册成功，欢迎加入！', 'success');
-      navigate('driver-main');
-    });
-  }
-
-  // ===== 发送验证码按钮（通用处理，按钮ID区分场景） =====
-  function startSMSCountdown(btn) {
-    var seconds = 60;
-    btn.disabled = true;
-    btn.textContent = '重新发送(' + seconds + ')';
-    var timer = setInterval(function() {
-      seconds--;
-      if (seconds <= 0) {
-        clearInterval(timer);
-        btn.disabled = false;
-        btn.textContent = '重新发送';
-      } else {
-        btn.textContent = '重新发送(' + seconds + ')';
-      }
-    }, 1000);
-    return timer;
-  }
-
-  var smsSendBtns = [
-    { id: 'smslogin-send-btn', phoneId: 'smslogin-phone', type: 'login', role: 'passenger' },
-    { id: 'reg-send-btn',      phoneId: 'reg-phone',      type: 'register', role: 'passenger' },
-    { id: 'dsmslogin-send-btn',phoneId: 'dsmslogin-phone',type: 'login', role: 'driver' },
-    { id: 'dreg-send-btn',     phoneId: 'dreg-phone',     type: 'register', role: 'driver' },
-  ];
-
-  smsSendBtns.forEach(function(cfg) {
-    var btn = document.getElementById(cfg.id);
-    if (!btn) return;
-    btn.addEventListener('click', async function() {
-      var phoneEl = document.getElementById(cfg.phoneId);
-      if (!phoneEl) return;
-      var phone = phoneEl.value.trim();
-      if (!/^1\d{10}$/.test(phone)) { showToast('请输入正确的11位手机号', 'error'); return; }
-      btn.disabled = true;
-      btn.textContent = '发送中...';
-      var result = await DB.sendSMS(phone, cfg.type, cfg.role);
-      if (result.error) {
-        showToast(result.error, 'error');
-        btn.disabled = false;
-        btn.textContent = '重新发送';
-        return;
-      }
-      // DEV_MODE 时显示测试码
-      if (result.dev_mode && result.code) {
-        showToast('【开发模式】验证码: ' + result.code + '（见日志）', 'info', 8000);
-      } else {
-        showToast(result.message || '验证码已发送', 'success');
-      }
-      startSMSCountdown(btn);
-    });
-  });
-
   // ===== 地图初始化 =====
   window.__orderMap = null;
   window.__drvMap = null;

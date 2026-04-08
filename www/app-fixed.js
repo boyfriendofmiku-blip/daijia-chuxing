@@ -595,6 +595,7 @@ function navigate(page, params, skipHistory) {
 
 // 返回上一页
 function goBack() {
+  console.log('[DEBUG] goBack called. pageHistory length:', State.pageHistory.length, 'currentPage:', State.currentPage);
   // 清理当前页的追踪
   stopLiveTracking();
   stopArrivalCheck();
@@ -603,6 +604,7 @@ function goBack() {
     var prev = State.pageHistory.pop();
     State.currentPage = prev.page;
     State.pageParams = prev.params || {};
+    console.log('[DEBUG] goBack navigating to:', prev.page);
     history.pushState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
     render();
   } else {
@@ -1591,7 +1593,10 @@ function bindEvents() {
   document.querySelectorAll('[data-action]').forEach(function(el) {
     el.addEventListener('click', function(e) {
       e.stopPropagation();
-      handleAction(el.dataset.action, el.dataset);
+      var action = el.dataset.action;
+      var dataset = el.dataset;
+      console.log('[DEBUG] data-action clicked:', action, dataset);
+      handleAction(action, dataset);
     });
   });
 
@@ -2307,11 +2312,14 @@ async function handleAction(action, dataset) {
     // 打开导航（司机端）
     case 'open-navigation': {
       var navOrderId = dataset.orderId;
+      console.log('[DEBUG] open-navigation clicked, orderId:', navOrderId);
       var navOrder = await DB.getOrderById(navOrderId);
+      console.log('[DEBUG] order data:', navOrder);
       if (!navOrder) { showToast('订单不存在', 'error'); break; }
       // 优先用目的地坐标打开地图导航，退而使用地址搜索
       var destLat = navOrder.toLat, destLng = navOrder.toLng;
       var destName = encodeURIComponent(navOrder.to || '目的地');
+      console.log('[DEBUG] navigation coords:', destLat, destLng, 'destName:', destName);
       var navUrl = '';
       var ua = navigator.userAgent.toLowerCase();
       if (destLat && destLng) {
@@ -2326,8 +2334,11 @@ async function handleAction(action, dataset) {
           navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + destName + '&mode=car&callnative=1';
         }
       } else {
+        // 没有坐标时使用地址搜索
         navUrl = 'https://uri.amap.com/search?keywords=' + destName;
+        showToast('订单缺少目的地坐标，已用地址搜索', '');
       }
+      console.log('[DEBUG] opening navUrl:', navUrl);
       window.open(navUrl, '_blank');
       break;
     }

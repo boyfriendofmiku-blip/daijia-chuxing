@@ -1187,9 +1187,13 @@ async function renderOrderDetail(orderId) {
 }
 
 // ============================================================
-//  司机端 - 初始化内嵌导航地图
+// 司机端 - 增强版内嵌导航地图
 // ============================================================
 var _navMapState = null; // 导航地图状态
+var _speechSynth = window.speechSynthesis; // 语音合成对象
+var _lastSpokenInstruction = ''; // 上次播报的指令（避免重复）
+var _speechEnabled = true; // 语音开关
+var _currentDriving = null; // 当前导航实例
 
 function initNavMap(orderId) {
   if (typeof AMap === 'undefined') {
@@ -1200,22 +1204,106 @@ function initNavMap(orderId) {
 
   var container = document.getElementById('nav-amap-container');
   if (!container) {
-    // 容器还没渲染好，继续等待
     setTimeout(function() { initNavMap(orderId); }, 500);
     return;
   }
 
-  // 容器尺寸检查
   if (container.clientWidth === 0 || container.clientHeight === 0) {
-    // 容器尺寸为 0，等待渲染完成
     setTimeout(function() { initNavMap(orderId); }, 500);
     return;
   }
 
-  // 加载需要的插件
-  AMap.plugin(['AMap.Driving', 'AMap.Geolocation'], function() {
+  // 加载增强导航插件
+  AMap.plugin(['AMap.Driving', 'AMap.Geolocation', 'AMap.ToolBar', 'AMap.HawkEye'], function() {
     _doInitNavMap(orderId, container);
   });
+}
+
+// 语音播报函数
+function _speak(text, force) {
+  if (!_speechEnabled && !force) return;
+  if (!window.speechSynthesis) return;
+  if (text === _lastSpokenInstruction && !force) return; // 避免重复播报
+  
+  _lastSpokenInstruction = text;
+  window.speechSynthesis.cancel(); // 取消之前的播报
+  var utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'zh-CN';
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+  
+  // 尝试选择中文语音
+  var voices = window.speechSynthesis.getVoices();
+  var zhVoice = voices.find(function(v) { return v.lang.indexOf('zh') >= 0; });
+  if (zhVoice) utterance.voice = zhVoice;
+  
+  window.speechSynthesis.speak(utterance);
+  console.log('[NavMap] 语音播报:', text);
+}
+
+// 切换语音开关
+function _toggleSpeech() {
+  _speechEnabled = !_speechEnabled;
+  var btn = document.getElementById('speech-toggle-btn');
+  if (btn) {
+    btn.textContent = _speechEnabled ? '🔊' : '🔇';
+    btn.title = _speechEnabled ? '点击关闭语音' : '点击开启语音';
+  }
+  if (!_speechEnabled) {
+    window.speechSynthesis.cancel();
+    _speak('语音导航已关闭', true);
+  } else {
+    _speak('语音导航已开启', true);
+  }
+}
+
+// 解析导航指令文字
+function _parseDrivingInstruction(instruction, distance) {
+  if (!instruction) return null;
+  
+  // 简化指令文字
+  var text = instruction
+    .replace(/<[^>]+>/g, '') // 移除HTML标签
+    .replace(/左转/gi, '左转')
+    .replace(/右转/gi, '右转')
+    .replace(/直行/gi, '直行')
+    .replace(/掉头/gi, '掉头')
+    .replace(/到达/gi, '到达')
+    .replace(/经过/gi, '经过');
+  
+  // 添加距离信息
+  var distText = '';
+  if (distance) {
+    if (distance >= 1000) {
+      distText = Math.round(distance / 1000) + '公里后';
+    } else {
+      distText = Math.round(distance) + '米后';
+    }
+  }
+  
+  return distText + text;
+}
+
+// 格式化距离
+function _formatDistance(meters) {
+  if (meters >= 1000) {
+    return (meters / 1000).toFixed(1) + ' km';
+  }
+  return Math.round(meters) + ' m';
+}
+
+// 格式化时间
+function _formatDuration(seconds) {
+  if (seconds >= 3600) {
+    var hours = Math.floor(seconds / 3600);
+    var mins = Math.round((seconds % 3600) / 60);
+    return hours + 'h ' + mins + 'min';
+  }
+  if (seconds >= 60) {
+    return Math.round(seconds / 60) + ' 分钟';
+  }
+  return seconds + ' 秒';
 }
 
 function _doInitNavMap(orderId, container) {
@@ -1234,121 +1322,324 @@ function _doInitNavMap(orderId, container) {
       startLng = parseFloat(cachedPos.lng) || 0;
     } catch(e) {}
 
-    // 如果没有起始位置，使用高德定位
-    var useGeolocation = !startLat || !startLng;
-
-    // 创建地图（以终点为中心）
-    var center = [destLng, destLat];
-    if (startLat && startLng) {
-      center = [(startLng + destLng) / 2, (startLat + destLat) / 2];
-    }
-
+    // 创建地图
+    var center = (startLat && startLng) ? [startLng, startLat] : [destLng, destLat];
     var map = new AMap.Map('nav-amap-container', {
-      zoom: 13,
+      zoom: 15,
       center: center,
       mapStyle: 'amap://styles/normal',
-      resizeEnable: true
+      resizeEnable: true,
+      viewMode: '2D'
     });
 
+    // 添加地图控件
+    map.addControl(new AMap.ToolBar({ position: 'right-bottom' }));
+    
     // 存储地图实例
-    _navMapState = { map: map, orderId: orderId, destLat: destLat, destLng: destLng, startMarker: null, routeLine: null };
+    _navMapState = {
+      map: map,
+      orderId: orderId,
+      destLat: destLat,
+      destLng: destLng,
+      destName: destName,
+      driverMarker: null,
+      routeLine: null,
+      passedLine: null,
+      destMarker: null,
+      heading: 0, // 当前朝向
+      routeSteps: [], // 路线步骤
+      currentStepIndex: 0
+    };
+
+    // 司机位置标记（带朝向箭头）
+    _navMapState.driverMarker = new AMap.Marker({
+      position: center,
+      content: '<div id="driver-car-icon" style="width:32px;height:32px;text-align:center;transform-origin:center"><div style="width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-bottom:18px solid #2196F3;margin:0 auto;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))"></div><div style="background:#2196F3;color:#fff;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:bold;margin-top:-2px">导航</div></div>',
+      offset: new AMap.Pixel(-16, -32),
+      autoRotation: true,
+      angle: 0
+    });
+    _navMapState.driverMarker.setMap(map);
 
     // 终点标记
-    var destMarker = new AMap.Marker({
+    _navMapState.destMarker = new AMap.Marker({
       position: [destLng, destLat],
-      content: '<div style="background:#E74C3C;color:#fff;padding:6px 10px;border-radius:16px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🔴 ' + destName + '</div>',
+      content: '<div style="background:#E74C3C;color:#fff;padding:6px 10px;border-radius:16px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🏁 ' + destName + '</div>',
       offset: new AMap.Pixel(-40, -15)
     });
-    destMarker.setMap(map);
+    _navMapState.destMarker.setMap(map);
 
-    // 司机位置标记（如果已有位置）
-    var driverMarker = null;
-    if (startLat && startLng) {
-      driverMarker = _updateDriverMarker(map, startLat, startLng, null);
-      _navMapState.startMarker = driverMarker;
-      map.setCenter([startLng, startLat]);
-    }
+    // 初始化定位
+    _initNavGeolocation(orderId);
 
-    // 规划路线
-    if (startLat && startLng) {
-      _drawNavRoute(map, startLat, startLng, destLat, destLng);
-    } else {
-      // 无起始位置，先定位
-      _navMapState.map.setCenter([destLng, destLat]);
-    }
-
-    // 高德原生定位（更新司机位置）
-    var geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000 });
-    map.addControl(geolocation);
-
-    function _onLocationSuccess(result) {
-      if (!_navMapState || _navMapState.orderId !== orderId) return;
-      var lat = result.position.lat;
-      var lng = result.position.lng;
-      console.log('[NavMap] 定位成功:', lat, lng);
-
-      // 更新司机标记
-      if (_navMapState.startMarker) {
-        _navMapState.startMarker.setPosition([lng, lat]);
-      } else {
-        _navMapState.startMarker = _updateDriverMarker(map, lat, lng, null);
-        // 首次定位后画路线
-        _drawNavRoute(map, lat, lng, _navMapState.destLat, _navMapState.destLng);
-      }
-      _navMapState.map.setCenter([lng, lat]);
-
-      // 更新坐标显示
-      var coordsEl = document.getElementById('nav-coords');
-      if (coordsEl) coordsEl.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
-    }
-
-    function _onLocationError() {
-      console.warn('[NavMap] 定位失败');
-    }
-
-    geolocation.getCurrentPosition(function(status, result) {
-      if (status === 'complete') _onLocationSuccess(result);
-      else _onLocationError();
-    });
-
-    // 定期更新司机位置（复用 GPS 上报逻辑，每 5 秒）
+    // 定期更新位置
     _navMapState._watchId = setInterval(function() {
       if (!_navMapState || _navMapState.orderId !== orderId) {
         clearInterval(_navMapState._watchId);
         return;
       }
-      try {
-        var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
-        var lat2 = parseFloat(pos.lat);
-        var lng2 = parseFloat(pos.lng);
-        if (lat2 && lng2) {
-          if (_navMapState.startMarker) {
-            _navMapState.startMarker.setPosition([lng2, lat2]);
-          } else {
-            _navMapState.startMarker = _updateDriverMarker(_navMapState.map, lat2, lng2, null);
-            _drawNavRoute(_navMapState.map, lat2, lng2, _navMapState.destLat, _navMapState.destLng);
-          }
-          _navMapState.map.setCenter([lng2, lat2]);
-          var coordsEl2 = document.getElementById('nav-coords');
-          if (coordsEl2) coordsEl2.textContent = lat2.toFixed(5) + ', ' + lng2.toFixed(5);
-        }
-      } catch(e) {}
-    }, 5000);
-
-    // 点击地图：重新规划从点击位置到终点的路线
-    map.on('click', function(e) {
-      if (!_navMapState) return;
-      var clickLat = e.lnglat.getLat();
-      var clickLng = e.lnglat.getLng();
-      if (_navMapState.startMarker) {
-        _navMapState.startMarker.setPosition([clickLng, clickLat]);
-      } else {
-        _navMapState.startMarker = _updateDriverMarker(map, clickLat, clickLng, null);
-      }
-      _drawNavRoute(map, clickLat, clickLng, _navMapState.destLat, _navMapState.destLng);
-      map.setCenter([clickLng, clickLat]);
-    });
+      _updatePositionFromCache(orderId);
+    }, 3000);
   });
+}
+
+// 初始化定位
+function _initNavGeolocation(orderId) {
+  if (!window.navigator.geolocation) {
+    console.warn('[NavMap] 浏览器不支持定位');
+    _updatePositionFromCache(orderId);
+    return;
+  }
+
+  // 尝试使用高德定位
+  if (typeof AMap !== 'undefined') {
+    var geolocation = new AMap.Geolocation({
+      enableHighAccuracy: true,
+      timeout: 10000,
+      convert: true
+    });
+    
+    geolocation.getCurrentPosition(function(status, result) {
+      if (status === 'complete' && result.position) {
+        _onNavLocationSuccess(result.position.lat, result.position.lng, result.heading || 0, orderId);
+        // 开始持续定位
+        geolocation.watchPosition(function(res) {
+          if (res.position) {
+            _onNavLocationSuccess(res.position.lat, res.position.lng, res.heading || _navMapState.heading, orderId);
+          }
+        });
+      } else {
+        console.warn('[NavMap] 高德定位失败，使用缓存');
+        _updatePositionFromCache(orderId);
+      }
+    });
+  } else {
+    // 使用浏览器原生定位
+    window.navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        _onNavLocationSuccess(pos.coords.latitude, pos.coords.longitude, pos.coords.heading || 0, orderId);
+      },
+      function() {
+        _updatePositionFromCache(orderId);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+}
+
+// 定位成功回调
+function _onNavLocationSuccess(lat, lng, heading, orderId) {
+  if (!_navMapState || _navMapState.orderId !== orderId) return;
+  
+  console.log('[NavMap] 定位:', lat, lng, '朝向:', heading);
+  
+  // 更新标记位置和朝向
+  _navMapState.driverMarker.setPosition([lng, lat]);
+  if (heading && heading !== 0) {
+    _navMapState.driverMarker.setAngle(heading);
+  }
+  _navMapState.heading = heading || _navMapState.heading;
+  
+  // 更新坐标显示
+  var coordsEl = document.getElementById('nav-coords');
+  if (coordsEl) coordsEl.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+  
+  // 地图跟随中心（首次定位）
+  if (!_navMapState._firstLocationDone) {
+    _navMapState._firstLocationDone = true;
+    _navMapState.map.setCenter([lng, lat]);
+    _navMapState.map.setZoom(16);
+    // 首次定位后规划路线
+    _drawNavRoute(lat, lng);
+  }
+}
+
+// 从缓存更新位置
+function _updatePositionFromCache(orderId) {
+  if (!_navMapState || _navMapState.orderId !== orderId) return;
+  
+  try {
+    var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
+    var lat = parseFloat(pos.lat);
+    var lng = parseFloat(pos.lng);
+    if (lat && lng) {
+      _onNavLocationSuccess(lat, lng, _navMapState.heading, orderId);
+    }
+  } catch(e) {}
+}
+
+// 绘制导航路线
+function _drawNavRoute(fromLat, fromLng) {
+  if (!_navMapState) return;
+  
+  var destLat = _navMapState.destLat;
+  var destLng = _navMapState.destLng;
+  var destName = _navMapState.destName;
+  
+  // 清除旧路线
+  if (_navMapState.routeLine) {
+    _navMapState.routeLine.setMap(null);
+    _navMapState.routeLine = null;
+  }
+  if (_navMapState.passedLine) {
+    _navMapState.passedLine.setMap(null);
+    _navMapState.passedLine = null;
+  }
+  if (_currentDriving) {
+    _currentDriving = null;
+  }
+  
+  // 使用高德导航
+  var policy = (AMap.DrivingPolicy && AMap.DrivingPolicy.LEAST_TIME) ? AMap.DrivingPolicy.LEAST_TIME : 0;
+  _currentDriving = new AMap.Driving({
+    policy: policy,
+    showTraffic: true,
+    extensions: 'all'
+  });
+  
+  _currentDriving.search([fromLng, fromLat], [destLng, destLat], function(status, result) {
+    if (status === 'complete' && result.routes && result.routes.length > 0) {
+      var route = result.routes[0];
+      
+      // 存储路线步骤用于语音播报
+      if (route.steps) {
+        _navMapState.routeSteps = route.steps;
+      }
+      
+      // 绘制已行驶路线（灰色）
+      var path = route.path;
+      if (path && path.length > 0) {
+        _navMapState.routeLine = new AMap.Polyline({
+          path: path,
+          strokeColor: '#3777FF',
+          strokeWeight: 8,
+          strokeStyle: 'solid',
+          lineJoin: 'round'
+        });
+        _navMapState.routeLine.setMap(_navMapState.map);
+      }
+      
+      // 更新距离和时间
+      var distance = parseFloat(route.distance) || 0;
+      var duration = parseFloat(route.time || route.duration) || 0;
+      var distEl = document.getElementById('nav-distance');
+      var durEl = document.getElementById('nav-duration');
+      if (distEl) distEl.textContent = _formatDistance(distance);
+      if (durEl) durEl.textContent = _formatDuration(duration);
+      
+      // 显示导航提示
+      _updateNavInstruction(route.steps, fromLat, fromLng);
+      
+      // 地图自适应
+      _navMapState.map.setFitView(_navMapState.routeLine, false, [60, 80, 60, 120]);
+      
+      // 首次播报
+      if (!_navMapState._routeAnnounced) {
+        _navMapState._routeAnnounced = true;
+        _speak('导航开始，目的地是' + destName + '，全程' + _formatDistance(distance));
+      }
+    }
+  });
+}
+
+// 更新导航指令显示
+function _updateNavInstruction(steps, currentLat, currentLng) {
+  if (!steps || !_navMapState) return;
+  
+  // 找到下一个转弯指令
+  var nextStep = null;
+  var passedDistance = 0;
+  
+  for (var i = 0; i < steps.length; i++) {
+    var step = steps[i];
+    // 判断是否经过该步骤（简单判断）
+    if (step.path && step.path.length > 0) {
+      // 检查车辆是否已进入该路段
+      var stepStart = step.path[0];
+      var stepEnd = step.path[step.path.length - 1];
+      var distToStep = _calcDistance(currentLat, currentLng, stepStart.lat, stepStart.lng);
+      
+      if (distToStep < 50) { // 距离起点50米内
+        // 这是当前或下一个要经过的步骤
+        if (step.instruction && step.instruction.indexOf('直行') === -1) {
+          nextStep = step;
+          break;
+        }
+      }
+    }
+  }
+  
+  // 更新UI
+  var instructionEl = document.getElementById('nav-instruction');
+  var instructionIconEl = document.getElementById('nav-instruction-icon');
+  
+  if (nextStep) {
+    var instruction = nextStep.instruction.replace(/<[^>]+>/g, '');
+    var distance = nextStep.distance || 0;
+    var distText = _formatDistance(distance);
+    
+    if (instructionEl) {
+      instructionEl.innerHTML = '<div style="font-size:16px;font-weight:600;color:#fff;margin-bottom:4px">' + instruction + '</div>' +
+        '<div style="font-size:13px;color:rgba(255,255,255,0.7)">前方 ' + distText + '</div>';
+    }
+    
+    // 更新图标
+    var icon = '⬆️';
+    if (instruction.indexOf('左转') >= 0) icon = '⬅️';
+    else if (instruction.indexOf('右转') >= 0) icon = '➡️';
+    else if (instruction.indexOf('掉头') >= 0) icon = '🔄';
+    else if (instruction.indexOf('到达') >= 0) icon = '🏁';
+    if (instructionIconEl) instructionIconEl.textContent = icon;
+    
+    // 语音播报（接近转弯时）
+    if (distance < 500 && distance > 100) {
+      var speechText = _parseDrivingInstruction(instruction, distance);
+      if (speechText) _speak(speechText);
+    }
+  } else {
+    // 没有明确转弯，跟随路线
+    if (instructionEl) {
+      instructionEl.innerHTML = '<div style="font-size:14px;color:rgba(255,255,255,0.8)">跟随蓝色路线行驶</div>';
+    }
+    if (instructionIconEl) instructionIconEl.textContent = '🛣️';
+  }
+}
+
+// 计算两点间距离（米）
+function _calcDistance(lat1, lng1, lat2, lng2) {
+  var R = 6371000; // 地球半径（米）
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// 更新司机标记（兼容旧函数）
+function _updateDriverMarker(map, lat, lng, label) {
+  var marker = new AMap.Marker({
+    position: [lng, lat],
+    content: '<div style="background:#2196F3;color:#fff;padding:6px 10px;border-radius:16px;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🧑‍✈️ 您的位置</div>',
+    offset: new AMap.Pixel(-40, -15)
+  });
+  marker.setMap(map);
+  return marker;
+}
+
+// 退出导航时清理
+function cleanupNavMap() {
+  if (_navMapState) {
+    if (_navMapState._watchId) clearInterval(_navMapState._watchId);
+    if (_navMapState.map) _navMapState.map.destroy();
+    _navMapState = null;
+  }
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  _currentDriving = null;
+  _lastSpokenInstruction = '';
 }
 
 function _updateDriverMarker(map, lat, lng, label) {
@@ -1448,32 +1739,46 @@ async function renderNavMapPage(orderId) {
   } catch(e) {}
 
   return '<div class="page nav-map-page" style="padding:0">' +
-    // 顶部信息栏 (高度约 56px)
-    '<div style="position:absolute;top:0;left:0;right:0;z-index:200;background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.1);height:60px;box-sizing:border-box">' +
+    // 顶部信息栏
+    '<div style="position:absolute;top:0;left:0;right:0;z-index:200;background:linear-gradient(180deg,rgba(26,26,46,0.95) 0%,rgba(26,26,46,0.85) 100%);backdrop-filter:blur(10px);padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.1);height:60px;box-sizing:border-box">' +
       '<button class="back-btn" data-action="go-back" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">←</button>' +
       '<div style="flex:1">' +
-        '<div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:2px">🧭 内嵌导航</div>' +
+        '<div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:2px">🧭 内嵌导航 · 增强版</div>' +
         '<div style="font-size:14px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + destAddr + '</div>' +
       '</div>' +
-      '<div id="nav-info-badge" style="background:rgba(255,255,255,0.1);border-radius:20px;padding:6px 12px;font-size:13px;color:#fff;text-align:center;min-width:70px">' +
-        '<div id="nav-distance" style="font-size:16px;font-weight:700">--</div>' +
-        '<div style="font-size:11px;opacity:0.7">--</div>' +
+      // 语音开关按钮
+      '<button id="speech-toggle-btn" onclick="_toggleSpeech()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="点击切换语音">🔊</button>' +
+      // 距离信息
+      '<div style="background:linear-gradient(135deg,#3777FF,#6259FF);border-radius:20px;padding:6px 14px;text-align:center;min-width:80px;box-shadow:0 2px 10px rgba(55,119,255,0.4)">' +
+        '<div id="nav-distance" style="font-size:18px;font-weight:700;color:#fff">--</div>' +
+        '<div id="nav-duration" style="font-size:11px;color:rgba(255,255,255,0.8)">--</div>' +
       '</div>' +
     '</div>' +
-    // 地图区域 (避开顶部和底部栏)
-    '<div id="nav-amap-container" style="position:absolute;top:60px;left:0;right:0;bottom:90px;z-index:100"></div>' +
-    // 底部状态栏 (高度约 80px)
-    '<div style="position:absolute;bottom:0;left:0;right:0;z-index:200;background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);padding:12px 16px 20px;border-top:1px solid rgba(255,255,255,0.1);height:90px;box-sizing:border-box">' +
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+    // 地图区域
+    '<div id="nav-amap-container" style="position:absolute;top:60px;left:0;right:0;bottom:100px;z-index:100"></div>' +
+    // 导航提示卡片（中间悬浮）
+    '<div style="position:absolute;top:70px;left:50%;transform:translateX(-50%);z-index:300;background:rgba(26,26,46,0.95);border-radius:16px;padding:12px 20px;min-width:200px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1)">' +
+      '<div id="nav-instruction-icon" style="font-size:28px;margin-bottom:4px">⬆️</div>' +
+      '<div id="nav-instruction"><div style="font-size:14px;color:rgba(255,255,255,0.8)">正在规划路线...</div></div>' +
+    '</div>' +
+    // 底部状态栏
+    '<div style="position:absolute;bottom:0;left:0;right:0;z-index:200;background:linear-gradient(0deg,rgba(26,26,46,0.98) 0%,rgba(26,26,46,0.9) 100%);backdrop-filter:blur(10px);padding:12px 16px 24px;border-top:1px solid rgba(255,255,255,0.1);height:100px;box-sizing:border-box">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
         '<div id="nav-dot" style="width:10px;height:10px;border-radius:50%;background:#4CAF50;box-shadow:0 0 8px #4CAF50;animation:pulse 2s infinite;flex-shrink:0"></div>' +
-        '<div style="font-size:14px;color:#fff;font-weight:500">📍 实时定位中</div>' +
+        '<div style="font-size:14px;color:#fff;font-weight:500">📍 GPS定位中</div>' +
         '<div style="flex:1"></div>' +
-        '<div id="nav-coords" style="font-size:12px;color:rgba(255,255,255,0.5)">--</div>' +
+        '<div id="nav-coords" style="font-size:11px;color:rgba(255,255,255,0.5)">--</div>' +
       '</div>' +
-      '<div style="font-size:12px;color:rgba(255,255,255,0.5);line-height:1.5">提示：跟着地图蓝色路线行驶即可到达目的地</div>' +
+      // 外部导航按钮
+      '<div style="display:flex;gap:10px">' +
+        '<a href="amap://navi?sourceApplication=代驾出行&lat=' + destLat + '&lng=' + destLng + '&name=' + encodeURIComponent(destName) + '&dev=1" style="flex:1;background:linear-gradient(135deg,#52c41a,#73d13d);color:#fff;padding:10px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px rgba(82,196,26,0.3)">📱 高德导航</a>' +
+        '<a href="http://maps.apple.com/?daddr=' + destLat + ',' + destLng + '&dirflg=d" style="flex:1;background:linear-gradient(135deg,#1890ff,#40a9ff);color:#fff;padding:10px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px rgba(24,144,255,0.3)">🍎 Apple Maps</a>' +
+      '</div>' +
     '</div>' +
     '<style>' +
       '@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }' +
+      '@keyframes bounceIn { 0%{transform:translateX(-50%) scale(0.5);opacity:0} 100%{transform:translateX(-50%) scale(1);opacity:1} }' +
+      '#nav-instruction { animation: bounceIn 0.3s ease-out }' +
       '.nav-map-page .page-header{display:none}' +
     '</style>' +
   '</div>';
@@ -2737,10 +3042,29 @@ async function initPageExtras() {
     if (order && order.fromLat && order.fromLng && order.toLat && order.toLng) {
       var isActiveOrder = (order.status === 'ongoing' || order.status === 'accepted');
       if (isActiveOrder) {
-        // 实时追踪地图
-        setTimeout(function() {
+        // 实时追踪地图 - 增加重试逻辑确保容器已渲染
+        var initLiveMapWithRetry = function(attempts) {
+          if (attempts === undefined) attempts = 0;
+          var mapDiv = document.getElementById('detail-live-map');
+          if (!mapDiv) {
+            if (attempts < 10) {
+              console.log('[Map] detail-live-map 容器未就绪，等待中...', attempts);
+              setTimeout(function() { initLiveMapWithRetry(attempts + 1); }, 200);
+            }
+            return;
+          }
+          // 确保容器有尺寸
+          if (mapDiv.clientWidth === 0 || mapDiv.clientHeight === 0) {
+            if (attempts < 10) {
+              console.log('[Map] detail-live-map 容器尺寸为0，等待中...', attempts);
+              setTimeout(function() { initLiveMapWithRetry(attempts + 1); }, 200);
+            }
+            return;
+          }
+          console.log('[Map] 初始化 detail-live-map 地图');
           initLiveTrackMap(order);
-        }, 150);
+        };
+        setTimeout(function() { initLiveMapWithRetry(0); }, 100);
       } else {
         setTimeout(function() {
           var m = initRouteDisplayMap('detail-route-map', order.fromLat, order.fromLng, order.toLat, order.toLng, {

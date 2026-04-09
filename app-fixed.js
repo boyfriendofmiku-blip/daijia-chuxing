@@ -563,6 +563,9 @@ function loadingHtml() {
 }
 
 // ============ 路由（异步） ============
+// 用于防止 popstate 和 navigate/goBack 之间的竞态条件
+var _isNavigating = false;
+
 function navigate(page, params, skipHistory) {
   // 切页时清理实时追踪和到达检测
   stopLiveTracking();
@@ -576,6 +579,7 @@ function navigate(page, params, skipHistory) {
     });
   }
 
+  _isNavigating = true;
   State.currentPage = page;
   State.pageParams = params || {};
   render();
@@ -584,19 +588,26 @@ function navigate(page, params, skipHistory) {
   if (!skipHistory) {
     history.pushState({ page: page, params: params }, '', '#' + page);
   }
+  _isNavigating = false;
 }
 
 // 初始化返回键监听
 function initBackHandler() {
   // 监听浏览器返回键（popstate）
   window.addEventListener('popstate', function(e) {
+    // 如果正在 navigate 过程中，跳过此 popstate（由 navigate 自身触发的）
+    if (_isNavigating) {
+      console.log('[DEBUG] popstate skipped, navigate in progress');
+      return;
+    }
+    
     if (e.state && e.state.page) {
       // 浏览器返回时，从历史记录恢复
       stopLiveTracking();
       stopArrivalCheck();
       State.currentPage = e.state.page;
       State.pageParams = e.state.params || {};
-      // 从本地历史栈同步
+      // 从本地历史栈同步（与 pushState 成对）
       if (State.pageHistory.length > 0) {
         State.pageHistory.pop();
       }
@@ -672,12 +683,16 @@ function goBack() {
   cleanupNavMap();
 
   if (State.pageHistory.length > 0) {
+    _isNavigating = true;
     var prev = State.pageHistory.pop();
     State.currentPage = prev.page;
     State.pageParams = prev.params || {};
     console.log('[DEBUG] goBack navigating to:', prev.page);
-    history.pushState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
+    // 使用 replaceState 而不是 pushState，避免触发 popstate
+    // 这样 URL 和页面状态保持同步，但不会触发浏览器历史的变化
+    history.replaceState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
     render();
+    _isNavigating = false;
     return true; // 返回成功
   } else {
     // 没有历史记录，返回 false 让调用者决定是否退出
@@ -3193,10 +3208,39 @@ function startRealtime() {
 // ============================================================
 //  初始化
 // ============================================================
+// 解析初始页面（从URL hash）
+function _getInitialPage() {
+  var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    var page = hash.slice(1); // 去掉 #
+    // 验证页面是否有效
+    var validPages = ['home', 'user-auth', 'driver-auth', 'user-main', 'driver-main',
+      'create-order', 'order-detail', 'nav-map', 'order-hall', 'driver-create-order',
+      'user-orders', 'driver-orders', 'profile', 'stats', 'notifications',
+      'feedback', 'about', 'manage-addresses', 'staff-auth', 'staff-main',
+      'staff-orders', 'staff-dispatch', 'staff-drivers', 'staff-users', 'staff-stats'];
+    if (validPages.indexOf(page) >= 0) {
+      return { page: page, params: {} };
+    }
+  }
+  return null;
+}
+
 function _startApp() {
   initBackHandler();
   startRealtime();
-  navigate('home');
+  
+  // 尝试从URL hash获取初始页面
+  var initial = _getInitialPage();
+  if (initial) {
+    // 从URL直接进入某个页面，不需要推入历史
+    State.currentPage = initial.page;
+    State.pageParams = initial.params;
+    render();
+  } else {
+    // 正常进入首页
+    navigate('home');
+  }
 }
 
 window.addEventListener('DOMContentLoaded', function() {

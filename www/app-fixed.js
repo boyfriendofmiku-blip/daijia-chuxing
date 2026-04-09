@@ -6,7 +6,92 @@
 // 当前版本号（每次发布请更新）
 window.APP_VERSION = 'v2.2-20260401-b';
 
-// TMap 兼容层将在 initPageExtras 中创建（当 AMap 就绪时）
+// 高德地图兼容层：让旧代码（TMap）兼容高德 API
+window.addEventListener('amap-ready', function() {
+  // 模拟 TMap 全局对象
+  window.TMap = {
+    LatLng: function(lat, lng) {
+      return { getLat: function() { return lat; }, getLng: function() { return lng; } };
+    },
+    Map: function(div, opts) {
+      return new AMap.Map(div, opts);
+    },
+    service: {
+      Geocoder: function() {
+        return {
+          getAddress: function(opts) {
+            return new Promise(function(resolve, reject) {
+              AMap.plugin('AMap.Geocoder', function() {
+                var geocoder = new AMap.Geocoder({ city: '全国' });
+                geocoder.getAddress(opts.location, function(status, result) {
+                  if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
+                    resolve({ result: { address: result.geocodes[0].formattedAddress } });
+                  } else {
+                    reject(result);
+                  }
+                });
+              });
+            });
+          }
+        };
+      },
+      DrivingService: function() {
+        return {
+          search: function(opts, callback) {
+            AMap.plugin('AMap.Driving', function() {
+              var driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME });
+              driving.search(opts.from, opts.to, function(status, result) {
+                callback({ result: result });
+              });
+            });
+          }
+        };
+      },
+      PoiSearch: function() {
+        return {
+          search: function(opts) {
+            return new Promise(function(resolve, reject) {
+              AMap.plugin('AMap.PlaceSearch', function() {
+                var placeSearch = new AMap.PlaceSearch({ pageSize: 8, city: '全国' });
+                placeSearch.search(opts.keyword, function(status, result) {
+                  if (status === 'complete' && result.poiList) {
+                    resolve({ data: result.poiList.pois.map(function(p) {
+                      return { title: p.name, address: p.address, location: { lat: p.location.getLat(), lng: p.location.getLng() } };
+                    }) });
+                  } else {
+                    resolve({ data: [] });
+                  }
+                });
+              });
+            });
+          }
+        };
+      }
+    },
+    MultiMarker: function(opts) {
+      return new AMap.Marker({
+        position: opts.geometries[0].position,
+        content: opts.geometries[0].content,
+        offset: new AMap.Pixel(-30, -15)
+      });
+    },
+    MultiPolyline: function(opts) {
+      return new AMap.Polyline({
+        path: opts.geometries[0].paths[0],
+        strokeColor: opts.styles['route-style'].color,
+        strokeWeight: opts.styles['route-style'].width,
+        strokeStyle: 'solid'
+      });
+    },
+    PolylineStyle: function(opts) { return opts; },
+    LatLngBounds: function(sw, ne) {
+      return { contains: function() { return true; } };
+    }
+  };
+  window.__tmapReady = true;
+  console.log('高德地图已加载，TMap兼容层已启用');
+  window.dispatchEvent(new Event('tmap-ready'));
+});
 
 // 全局错误处理：只在真正致命错误时才覆盖 app，地图/网络错误一律忽略
 window.onerror = function(msg, url, line, col, error) {
@@ -39,18 +124,36 @@ window.onerror = function(msg, url, line, col, error) {
 
 // 检查地图API加载状态
 setTimeout(function() {
-  console.log('[Map] 检查地图API状态:', typeof AMap, 'window.__amapReady:', window.__amapReady);
-  if (typeof AMap === 'undefined' && !window.__amapReady) {
-    console.warn('[Map] 高德地图API加载超时，地图功能可能受限');
-  }
-  if (window.__amapLoadFailed) {
-    console.warn('[Map] 高德地图加载失败');
+  console.log('检查地图API状态:', typeof TMap, 'window.__tmapReady:', window.__tmapReady);
+  if (typeof TMap === 'undefined' && !window.__tmapReady) {
+    console.warn('腾讯地图API加载超时，地图功能可能受限');
+    // 如果地图API未加载，显示提示
+    var app = document.getElementById('app');
+    if (app && app.innerHTML.indexOf('加载中') >= 0) {
+      app.innerHTML = '<div style="padding:40px;text-align:center"><div style="font-size:48px;margin-bottom:20px">⚠️</div><h3>地图加载中</h3><p style="color:#666;margin:12px 0">地图服务正在加载，请稍候...</p><p style="color:#999;font-size:13px;margin:8px 0">如果长时间未加载，请检查网络连接</p><button onclick="window.location.reload()" style="padding:12px 24px;background:#3498db;color:#fff;border:none;border-radius:8px;font-size:16px">重新加载</button></div>';
+    }
   }
 }, 5000); // 5秒后检查
 
 // 应用启动日志
 console.log('代驾出行应用启动，当前时间:', new Date().toLocaleTimeString());
 
+// 确保地图API回调不会被覆盖
+if (!window._originalOnTMapReady) {
+  window._originalOnTMapReady = window.onTMapReady;
+}
+
+// 安全的回调包装
+window.onTMapReady = function() {
+  console.log('地图API回调执行');
+  window.__tmapReady = true;
+  window.dispatchEvent(new Event('tmap-ready'));
+  
+  // 调用原始回调（如果存在）
+  if (window._originalOnTMapReady) {
+    window._originalOnTMapReady();
+  }
+};
 
 window.addEventListener('unhandledrejection', function(e) {
   console.error('未处理的Promise错误:', e.reason);
@@ -81,7 +184,9 @@ function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) 
 }
 
 
-// ============ 地图全屏展开 ============
+
+
+// ============ 地图全屏展开（使用高德地图） ============
 function openMapFullscreen() {
   // 检查地图加载状态
   if (window.__amapLoadFailed) {
@@ -97,14 +202,14 @@ function openMapFullscreen() {
     }
     return;
   }
-  if (!window.__detailRouteMap) {
-    showToast('地图尚未初始化完成', 'error');
-    console.log('[Map] 地图实例未就绪，detailRouteMap:', window.__detailRouteMap);
-    return;
-  }
 
   // 获取订单数据
   var order = window.__lastDetailOrder || {};
+  if (!order.fromLat || !order.fromLng || !order.toLat || !order.toLng) {
+    showToast('订单缺少位置信息', 'error');
+    return;
+  }
+
   var fromAddr = order.from || '出发地';
   var toAddr = order.to || '目的地';
   var routeInfo = window.__detailRouteInfo || {};
@@ -154,70 +259,48 @@ function openMapFullscreen() {
       if (!container) return;
 
       var order = window.__lastDetailOrder || {};
-      var fsMap = new TMap.Map(container, {
-        center: new TMap.LatLng(order.fromLat, order.fromLng),
-        zoom: 13,
-        pitch: 30,
-        mapStyleId: 'style1'
+      var centerLng = (parseFloat(order.fromLng) + parseFloat(order.toLng)) / 2;
+      var centerLat = (parseFloat(order.fromLat) + parseFloat(order.toLat)) / 2;
+
+      var fsMap = new AMap.Map('map-fs-container', {
+        zoom: 12,
+        center: [centerLng, centerLat],
+        mapStyle: 'amap://styles/normal'
       });
 
       // 起终点标记
-      new TMap.MultiMarker({
-        map: fsMap,
-        geometries: [
-          {
-            id: 'start',
-            position: new TMap.LatLng(order.fromLat, order.fromLng),
-            content: '<div style="background:#27AE60;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(39,174,96,0.4)">A</div>'
-          },
-          {
-            id: 'end',
-            position: new TMap.LatLng(order.toLat, order.toLng),
-            content: '<div style="background:#E74C3C;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(231,76,60,0.4)">B</div>'
-          }
-        ]
+      var startMarker = new AMap.Marker({
+        position: [parseFloat(order.fromLng), parseFloat(order.fromLat)],
+        content: '<div style="background:#27AE60;color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(39,174,96,0.4);border:3px solid #fff">A</div>',
+        offset: new AMap.Pixel(-18, -18)
       });
 
-      // 重新规划路线
-      new TMap.service.DrivingService({
-        complete: function(result) {
-          if (result && result.result && result.result.routes && result.result.routes.length > 0) {
-            var route = result.result.routes[0];
-            var path = [];
-            if (route.steps) {
-              route.steps.forEach(function(step) {
-                if (step.polyline) path = path.concat(step.polyline);
-              });
-            }
-            if (path.length > 0) {
-              new TMap.MultiPolyline({
-                map: fsMap,
-                styles: {
-                  'style': new TMap.PolylineStyle({
-                    color: '#3777FF',
-                    width: 8,
-                    borderWidth: 2,
-                    borderColor: '#FFF',
-                    lineCap: 'round',
-                    lineJoin: 'round'
-                  })
-                },
-                geometries: [{ id: 'line', styleId: 'style', paths: path }]
-              });
-            }
-            if (route.bounds) {
-              try {
-                fsMap.fitBounds(new TMap.LatLngBounds(
-                  new TMap.LatLng(route.bounds.southwest.lat, route.bounds.southwest.lng),
-                  new TMap.LatLng(route.bounds.northeast.lat, route.bounds.northeast.lng)
-                ), { padding: 80 });
-              } catch(e) {}
+      var endMarker = new AMap.Marker({
+        position: [parseFloat(order.toLng), parseFloat(order.toLat)],
+        content: '<div style="background:#E74C3C;color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(231,76,60,0.4);border:3px solid #fff">B</div>',
+        offset: new AMap.Pixel(-18, -18)
+      });
+
+      fsMap.add([startMarker, endMarker]);
+
+      // 规划驾车路线
+      AMap.plugin('AMap.Driving', function() {
+        var driving = new AMap.Driving({
+          map: fsMap,
+          panel: null,
+          outlineColor: '#3777FF'
+        });
+
+        driving.search(
+          new AMap.LngLat(parseFloat(order.fromLng), parseFloat(order.fromLat)),
+          new AMap.LngLat(parseFloat(order.toLng), parseFloat(order.toLat)),
+          function(status, result) {
+            if (status === 'complete' && result.routes && result.routes.length > 0) {
+              // 自动调整视野
+              fsMap.setFitView();
             }
           }
-        }
-      }).search({
-        from: new TMap.LatLng(order.fromLat, order.fromLng),
-        to: new TMap.LatLng(order.toLat, order.toLng)
+        );
       });
 
       window.__fsMap = fsMap;
@@ -231,7 +314,6 @@ function openMapFullscreen() {
   setTimeout(function() {
     var closeBtn = document.getElementById('map-fs-close');
     if (closeBtn) {
-      // 添加触摸反馈
       closeBtn.addEventListener('touchstart', function(e) {
         e.stopPropagation();
         this.style.transform = 'scale(0.95)';
@@ -240,20 +322,19 @@ function openMapFullscreen() {
         e.stopPropagation();
         this.style.transform = '';
       });
-      
       closeBtn.addEventListener('click', function() {
         closeMapFullscreen();
       });
     }
-    
-    // 点击空白区域也关闭（底部信息区除外）
+
+    // 点击地图区域不关闭，点击 overlay 背景关闭
     overlay.addEventListener('click', function(e) {
-      if (e.target.id === 'map-fs-container' || e.target === overlay) {
+      if (e.target === overlay) {
         closeMapFullscreen();
       }
     });
-    
-    // 手机上的触摸关闭（滑动关闭）
+
+    // 手机上的触摸关闭（向下滑动关闭）
     var startY = 0;
     overlay.addEventListener('touchstart', function(e) {
       startY = e.touches[0].clientY;
@@ -261,13 +342,12 @@ function openMapFullscreen() {
     overlay.addEventListener('touchmove', function(e) {
       var currentY = e.touches[0].clientY;
       var diff = currentY - startY;
-      // 向下滑动超过100px关闭
       if (diff > 100) {
         closeMapFullscreen();
       }
     });
   }, 100);
-  
+
   // 关闭全屏地图的函数
   function closeMapFullscreen() {
     overlay.classList.remove('active');
@@ -483,6 +563,9 @@ function loadingHtml() {
 }
 
 // ============ 路由（异步） ============
+// 用于防止 popstate 和 navigate/goBack 之间的竞态条件
+var _isNavigating = false;
+
 function navigate(page, params, skipHistory) {
   // 切页时清理实时追踪和到达检测
   stopLiveTracking();
@@ -496,6 +579,7 @@ function navigate(page, params, skipHistory) {
     });
   }
 
+  _isNavigating = true;
   State.currentPage = page;
   State.pageParams = params || {};
   render();
@@ -504,36 +588,26 @@ function navigate(page, params, skipHistory) {
   if (!skipHistory) {
     history.pushState({ page: page, params: params }, '', '#' + page);
   }
-}
-
-// 返回上一页
-function goBack() {
-  console.log('[DEBUG] goBack called. pageHistory length:', State.pageHistory.length, 'currentPage:', State.currentPage);
-  // 清理当前页的追踪
-  stopLiveTracking();
-  stopArrivalCheck();
-
-  if (State.pageHistory.length > 0) {
-    var prev = State.pageHistory.pop();
-    State.currentPage = prev.page;
-    State.pageParams = prev.params || {};
-    console.log('[DEBUG] goBack navigating to:', prev.page);
-    history.pushState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
-    render();
-  }
+  _isNavigating = false;
 }
 
 // 初始化返回键监听
 function initBackHandler() {
   // 监听浏览器返回键（popstate）
   window.addEventListener('popstate', function(e) {
+    // 如果正在 navigate 过程中，跳过此 popstate（由 navigate 自身触发的）
+    if (_isNavigating) {
+      console.log('[DEBUG] popstate skipped, navigate in progress');
+      return;
+    }
+    
     if (e.state && e.state.page) {
       // 浏览器返回时，从历史记录恢复
       stopLiveTracking();
       stopArrivalCheck();
       State.currentPage = e.state.page;
       State.pageParams = e.state.params || {};
-      // 从本地历史栈同步
+      // 从本地历史栈同步（与 pushState 成对）
       if (State.pageHistory.length > 0) {
         State.pageHistory.pop();
       }
@@ -609,12 +683,16 @@ function goBack() {
   cleanupNavMap();
 
   if (State.pageHistory.length > 0) {
+    _isNavigating = true;
     var prev = State.pageHistory.pop();
     State.currentPage = prev.page;
     State.pageParams = prev.params || {};
     console.log('[DEBUG] goBack navigating to:', prev.page);
-    history.pushState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
+    // 使用 replaceState 而不是 pushState，避免触发 popstate
+    // 这样 URL 和页面状态保持同步，但不会触发浏览器历史的变化
+    history.replaceState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
     render();
+    _isNavigating = false;
     return true; // 返回成功
   } else {
     // 没有历史记录，返回 false 让调用者决定是否退出
@@ -951,9 +1029,8 @@ async function renderOrderDetail(orderId) {
   const isUser = State.currentUser && State.currentUser.type === 'user';
   const isDriver = State.currentUser && State.currentUser.type === 'driver';
   const isStaff = State.currentUser && State.currentUser.type === 'staff';
-  let backAction = 'user-main';
-  if (isDriver) backAction = 'driver-orders';
-  if (isStaff) backAction = 'staff-orders';
+  // 统一使用 go-back，通过历史栈返回，避免与手机返回键冲突
+  const backAction = 'go-back';
 
   // 步骤进度
   const steps = [
@@ -2044,12 +2121,13 @@ function bindEvents() {
   
   function doInitMaps() {
     console.log('[Map] doInitMaps 执行');
-    // 检查高德地图 API
-    if (typeof AMap === 'undefined') {
-      console.warn('[Map] 高德地图API未就绪');
+    // 检查高德或腾讯地图API
+    var mapReady = typeof TMap !== 'undefined' || typeof AMap !== 'undefined';
+    console.log('[Map] API状态 - TMap:', typeof TMap, 'AMap:', typeof AMap);
+    if (!mapReady) {
+      console.warn('[Map] 地图API未就绪');
       return;
     }
-    console.log('[Map] API状态 - AMap:', typeof AMap);
     
     var orderMapEl = document.getElementById('order-map');
     console.log('[Map] order-map元素:', orderMapEl);
@@ -2067,7 +2145,7 @@ function bindEvents() {
       });
     }
     var drvMapEl = document.getElementById('drv-order-map');
-    if (drvMapEl && typeof AMap !== 'undefined') {
+    if (drvMapEl && (typeof TMap !== 'undefined' || typeof AMap !== 'undefined')) {
       window.__drvMap = initOrderMap({
         mapDivId: 'drv-order-map',
         fromInputId: 'drv-co-from', fromLatId: 'drv-co-from-lat', fromLngId: 'drv-co-from-lng',
@@ -2082,31 +2160,18 @@ function bindEvents() {
     }
   }
   
-  // 如果高德地图API已就绪，直接初始化；否则等待
-  if (typeof AMap !== 'undefined' && window.__amapReady) {
+  // 如果地图API已就绪，直接初始化；否则等待
+  var mapReady = typeof TMap !== 'undefined' || typeof AMap !== 'undefined';
+  if (mapReady) {
     doInitMaps();
-  } else if (typeof AMap !== 'undefined' && !window.__amapReady) {
-    // AMap 已加载但 __amapReady 未触发，等待一下
-    var checkOnce = setInterval(function() {
-      if (window.__amapReady || window.__amapLoadFailed) {
-        clearInterval(checkOnce);
-        doInitMaps();
-      }
-    }, 100);
-    setTimeout(function() { clearInterval(checkOnce); doInitMaps(); }, 15000);
-  } else if (window.__amapReady) {
-    // AMap 还未加载但即将就绪
-    var mapReadyHandler = function() {
-      doInitMaps();
-      window.removeEventListener('amap-ready', mapReadyHandler);
-    };
-    window.addEventListener('amap-ready', mapReadyHandler);
   } else {
-    // 监听高德地图就绪事件
+    // 等待任意地图API就绪
     var mapReadyHandler = function() {
       doInitMaps();
+      window.removeEventListener('tmap-ready', mapReadyHandler);
       window.removeEventListener('amap-ready', mapReadyHandler);
     };
+    window.addEventListener('tmap-ready', mapReadyHandler);
     window.addEventListener('amap-ready', mapReadyHandler);
   }
 
@@ -2666,71 +2731,6 @@ async function initPageExtras() {
     }
   }
   
-  // 如果 TMap 兼容层还未创建（AMap 已就绪但 TMap 未定义），创建它
-  if (typeof TMap === 'undefined') {
-    console.log('[Map] 创建 TMap 兼容层...');
-    window.TMap = {
-      LatLng: function(lat, lng) {
-        return { getLat: function() { return lat; }, getLng: function() { return lng; } };
-      },
-      Map: function(div, opts) {
-        return new AMap.Map(div, opts);
-      },
-      service: {
-        Geocoder: function() {
-          return {
-            getAddress: function(opts) {
-              return new Promise(function(resolve, reject) {
-                AMap.plugin('AMap.Geocoder', function() {
-                  var geocoder = new AMap.Geocoder({ city: '全国' });
-                  geocoder.getAddress(opts.location, function(status, result) {
-                    if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
-                      resolve({ result: { address: result.geocodes[0].formattedAddress } });
-                    } else {
-                      reject(result);
-                    }
-                  });
-                });
-              });
-            }
-          };
-        },
-        DrivingService: function() {
-          return {
-            search: function(opts, callback) {
-              AMap.plugin('AMap.Driving', function() {
-                var driving = new AMap.Driving({ policy: AMap.DrivingPolicy.LEAST_TIME });
-                driving.search(opts.from, opts.to, function(status, result) {
-                  callback({ result: result });
-                });
-              });
-            }
-          };
-        }
-      },
-      MultiMarker: function(opts) {
-        return new AMap.Marker({
-          position: opts.geometries[0].position,
-          content: opts.geometries[0].content,
-          offset: new AMap.Pixel(-30, -15)
-        });
-      },
-      MultiPolyline: function(opts) {
-        return new AMap.Polyline({
-          path: opts.geometries[0].paths[0],
-          strokeColor: opts.styles['route-style'].color,
-          strokeWeight: opts.styles['route-style'].width,
-          strokeStyle: 'solid'
-        });
-      },
-      PolylineStyle: function(opts) { return opts; },
-      LatLngBounds: function(sw, ne) {
-        return { contains: function() { return true; } };
-      }
-    };
-    window.__tmapReady = true;
-  }
-  
   // 初始化订单详情页的路线地图 / 实时追踪地图
   if (State.currentPage === 'order-detail' && State.pageParams.orderId) {
     var order = await DB.getOrderById(State.pageParams.orderId);
@@ -3208,10 +3208,39 @@ function startRealtime() {
 // ============================================================
 //  初始化
 // ============================================================
+// 解析初始页面（从URL hash）
+function _getInitialPage() {
+  var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    var page = hash.slice(1); // 去掉 #
+    // 验证页面是否有效
+    var validPages = ['home', 'user-auth', 'driver-auth', 'user-main', 'driver-main',
+      'create-order', 'order-detail', 'nav-map', 'order-hall', 'driver-create-order',
+      'user-orders', 'driver-orders', 'profile', 'stats', 'notifications',
+      'feedback', 'about', 'manage-addresses', 'staff-auth', 'staff-main',
+      'staff-orders', 'staff-dispatch', 'staff-drivers', 'staff-users', 'staff-stats'];
+    if (validPages.indexOf(page) >= 0) {
+      return { page: page, params: {} };
+    }
+  }
+  return null;
+}
+
 function _startApp() {
   initBackHandler();
   startRealtime();
-  navigate('home');
+  
+  // 尝试从URL hash获取初始页面
+  var initial = _getInitialPage();
+  if (initial) {
+    // 从URL直接进入某个页面，不需要推入历史
+    State.currentPage = initial.page;
+    State.pageParams = initial.params;
+    render();
+  } else {
+    // 正常进入首页
+    navigate('home');
+  }
 }
 
 window.addEventListener('DOMContentLoaded', function() {

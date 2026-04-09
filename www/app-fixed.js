@@ -1188,7 +1188,18 @@ function initNavMap(orderId) {
   }
 
   var container = document.getElementById('nav-amap-container');
-  if (!container) return;
+  if (!container) {
+    // 容器还没渲染好，继续等待
+    setTimeout(function() { initNavMap(orderId); }, 500);
+    return;
+  }
+
+  // 容器尺寸检查
+  if (container.clientWidth === 0 || container.clientHeight === 0) {
+    // 容器尺寸为 0，等待渲染完成
+    setTimeout(function() { initNavMap(orderId); }, 500);
+    return;
+  }
 
   // 加载需要的插件
   AMap.plugin(['AMap.Driving', 'AMap.Geolocation'], function() {
@@ -1426,8 +1437,8 @@ async function renderNavMapPage(orderId) {
   } catch(e) {}
 
   return '<div class="page nav-map-page" style="padding:0">' +
-    // 顶部信息栏
-    '<div style="position:absolute;top:0;left:0;right:0;z-index:200;background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.1)">' +
+    // 顶部信息栏 (高度约 56px)
+    '<div style="position:absolute;top:0;left:0;right:0;z-index:200;background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.1);height:60px;box-sizing:border-box">' +
       '<button class="back-btn" data-action="go-back" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">←</button>' +
       '<div style="flex:1">' +
         '<div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:2px">🧭 内嵌导航</div>' +
@@ -1438,10 +1449,10 @@ async function renderNavMapPage(orderId) {
         '<div style="font-size:11px;opacity:0.7">--</div>' +
       '</div>' +
     '</div>' +
-    // 地图区域
-    '<div id="nav-amap-container" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:100"></div>' +
-    // 底部状态栏
-    '<div style="position:absolute;bottom:0;left:0;right:0;z-index:200;background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);padding:12px 16px 20px;border-top:1px solid rgba(255,255,255,0.1)">' +
+    // 地图区域 (避开顶部和底部栏)
+    '<div id="nav-amap-container" style="position:absolute;top:60px;left:0;right:0;bottom:90px;z-index:100"></div>' +
+    // 底部状态栏 (高度约 80px)
+    '<div style="position:absolute;bottom:0;left:0;right:0;z-index:200;background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);padding:12px 16px 20px;border-top:1px solid rgba(255,255,255,0.1);height:90px;box-sizing:border-box">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
         '<div id="nav-dot" style="width:10px;height:10px;border-radius:50%;background:#4CAF50;box-shadow:0 0 8px #4CAF50;animation:pulse 2s infinite;flex-shrink:0"></div>' +
         '<div style="font-size:14px;color:#fff;font-weight:500">📍 实时定位中</div>' +

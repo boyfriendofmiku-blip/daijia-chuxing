@@ -1385,14 +1385,26 @@ function _doInitNavMap(orderId, container) {
 
 // 初始化定位
 function _initNavGeolocation(orderId) {
+  console.log('[NavMap] 开始初始化定位...');
+  
+  // 首先尝试从缓存获取位置
+  var cachedLat = 0, cachedLng = 0;
+  try {
+    var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
+    cachedLat = parseFloat(pos.lat) || 0;
+    cachedLng = parseFloat(pos.lng) || 0;
+  } catch(e) {}
+  
   if (!window.navigator.geolocation) {
     console.warn('[NavMap] 浏览器不支持定位');
-    _updatePositionFromCache(orderId);
+    // 使用缓存位置或订单出发地
+    _usePositionForRoute(cachedLat, cachedLng, orderId);
     return;
   }
 
   // 尝试使用高德定位
   if (typeof AMap !== 'undefined') {
+    console.log('[NavMap] 使用高德定位...');
     var geolocation = new AMap.Geolocation({
       enableHighAccuracy: true,
       timeout: 10000,
@@ -1400,6 +1412,7 @@ function _initNavGeolocation(orderId) {
     });
     
     geolocation.getCurrentPosition(function(status, result) {
+      console.log('[NavMap] 高德定位结果:', status, result);
       if (status === 'complete' && result.position) {
         _onNavLocationSuccess(result.position.lat, result.position.lng, result.heading || 0, orderId);
         // 开始持续定位
@@ -1409,29 +1422,73 @@ function _initNavGeolocation(orderId) {
           }
         });
       } else {
-        console.warn('[NavMap] 高德定位失败，使用缓存');
-        _updatePositionFromCache(orderId);
+        console.warn('[NavMap] 高德定位失败，使用缓存/订单位置');
+        _usePositionForRoute(cachedLat, cachedLng, orderId);
       }
     });
+    
+    // 添加定位超时后备
+    setTimeout(function() {
+      if (!_navMapState || !_navMapState._firstLocationDone) {
+        console.warn('[NavMap] 定位超时，使用后备位置');
+        _usePositionForRoute(cachedLat, cachedLng, orderId);
+      }
+    }, 12000);
   } else {
+    console.log('[NavMap] 使用浏览器原生定位...');
     // 使用浏览器原生定位
     window.navigator.geolocation.getCurrentPosition(
       function(pos) {
+        console.log('[NavMap] 浏览器定位成功:', pos.coords.latitude, pos.coords.longitude);
         _onNavLocationSuccess(pos.coords.latitude, pos.coords.longitude, pos.coords.heading || 0, orderId);
       },
-      function() {
-        _updatePositionFromCache(orderId);
+      function(err) {
+        console.warn('[NavMap] 浏览器定位失败:', err);
+        _usePositionForRoute(cachedLat, cachedLng, orderId);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }
 }
 
-// 定位成功回调
-function _onNavLocationSuccess(lat, lng, heading, orderId) {
+// 使用位置开始路线规划（后备函数）
+function _usePositionForRoute(lat, lng, orderId) {
   if (!_navMapState || _navMapState.orderId !== orderId) return;
   
-  console.log('[NavMap] 定位:', lat, lng, '朝向:', heading);
+  console.log('[NavMap] _usePositionForRoute:', lat, lng);
+  
+  // 如果缓存没有位置，尝试使用订单出发地
+  if (!lat || !lng) {
+    DB.getOrderById(orderId).then(function(order) {
+      if (order && order.fromLat && order.fromLng) {
+        console.log('[NavMap] 使用订单出发地:', order.fromLat, order.fromLng);
+        _onNavLocationSuccess(parseFloat(order.fromLat), parseFloat(order.fromLng), 0, orderId);
+      } else {
+        // 最后后备：使用地图中心点（北京）
+        console.warn('[NavMap] 无可用位置，使用默认位置');
+        _onNavLocationSuccess(39.908823, 116.397470, 0, orderId);
+      }
+    });
+  } else {
+    _onNavLocationSuccess(lat, lng, 0, orderId);
+  }
+}
+
+// 定位成功回调
+function _onNavLocationSuccess(lat, lng, heading, orderId) {
+  console.log('[NavMap] _onNavLocationSuccess 被调用:', lat, lng, heading, orderId);
+  
+  if (!_navMapState || _navMapState.orderId !== orderId) {
+    console.warn('[NavMap] _navMapState 不匹配，跳过');
+    return;
+  }
+  
+  if (!lat || !lng || lat === 0 || lng === 0) {
+    console.warn('[NavMap] 坐标无效:', lat, lng);
+    return;
+  }
+  
+  console.log('[NavMap] 定位成功:', lat, lng, '朝向:', heading);
   
   // 更新标记位置和朝向
   _navMapState.driverMarker.setPosition([lng, lat]);

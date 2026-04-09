@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>代驾出行 - APK下载</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: #fff;
+  }
+  .card {
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 24px;
+    padding: 40px 32px;
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+  .subtitle {
+    color: rgba(255,255,255,0.55);
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+  .qr-wrapper {
+    background: #fff;
+    border-radius: 16px;
+    padding: 16px;
+    display: inline-block;
+    margin-bottom: 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+  .qr-wrapper img {
+    display: block;
+    width: 200px;
+    height: 200px;
+  }
+  .qr-hint {
+    color: rgba(255,255,255,0.5);
+    font-size: 12px;
+    margin-bottom: 28px;
+  }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 16px 24px;
+    border-radius: 14px;
+    font-size: 17px;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+    margin-bottom: 12px;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #e94560, #c23152);
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(233,69,96,0.35);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(233,69,96,0.45);
+  }
+  .btn-secondary {
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.85);
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .btn-secondary:hover {
+    background: rgba(255,255,255,0.15);
+  }
+  .version {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.4);
+    font-size: 12px;
+  }
+  .status {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .status-ready { background: rgba(76,175,80,0.25); color: #66bb6a; }
+  .status-building { background: rgba(255,193,7,0.25); color: #ffc107; }
+  .status-empty { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">🚗</div>
+  <h1>代驾出行</h1>
+  <p class="subtitle">安全代驾，实时护送</p>
+
+  <!-- 二维码：扫码下载APK -->
+  <div class="qr-wrapper">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Fboyfriendofmiku-blip%2Fdaijia-chuxing%2Freleases%2Flatest%2Fdownload%2Fdaijia-chuxing.apk&margin=10&format=png" alt="APK下载二维码" onerror="this.parentElement.innerHTML='<div style=\'width:200px;height:200px;display:flex;align-items:center;justify-content:center;color:#999;font-size:14px;\'>二维码加载失败<br>请用下方按钮下载</div>'">
+  </div>
+  <p class="qr-hint">微信/浏览器扫码下载 APK（Android）</p>
+
+  <!-- APK直链 -->
+  <a id="apkLink" class="btn btn-primary" href="https://github.com/boyfriendofmiku-blip/daijia-chuxing/releases/latest/download/daijia-chuxing.apk">
+    ⬇️ 下载安装包 (APK)
+  </a>
+
+  <!-- GitHub Releases 页面 -->
+  <a class="btn btn-secondary" href="https://github.com/boyfriendofmiku-blip/daijia-chuxing/releases/latest" target="_blank">
+    📦 查看所有版本
+  </a>
+
+  <!-- 网页版入口 -->
+  <a class="btn btn-secondary" href="https://pdfeihong.top" target="_blank">
+    🌐 在线体验网页版
+  </a>
+
+  <div class="version">
+    <div id="statusBadge" class="status status-empty">检查中...</div><br>
+    <span id="statusText">正在检查最新版本...</span>
+  </div>
+</div>
+
+<script>
+// 检查最新 Release 版本
+async function checkLatestVersion() {
+  try {
+    const resp = await fetch('https://api.github.com/repos/boyfriendofmiku-blip/daijia-chuxing/releases/latest');
+    if (!resp.ok) throw new Error('API error');
+    const data = await resp.json();
+    const tag = data.tag_name; // e.g. "v12"
+    const apkUrl = data.assets.find(a => a.name === 'daijia-chuxing.apk');
+
+    document.getElementById('statusBadge').className = 'status status-ready';
+    document.getElementById('statusBadge').textContent = '✅ 最新';
+    document.getElementById('statusText').textContent = '最新版本: ' + tag + ' (' + new Date(data.published_at).toLocaleDateString('zh-CN') + ')';
+
+    if (apkUrl) {
+      document.getElementById('apkLink').href = apkUrl.browser_download_url;
+      // 更新二维码为真实直链
+      document.querySelector('.qr-wrapper img').src =
+        'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(apkUrl.browser_download_url) + '&margin=10&format=png';
+    }
+  } catch (e) {
+    // 找不到 Release，用默认链接
+    document.getElementById('statusBadge').className = 'status status-building';
+    document.getElementById('statusBadge').textContent = '🔄 编译中';
+    document.getElementById('statusText').innerHTML =
+      'APK 正在编译中，请稍等 3-5 分钟后再刷新页面<br>' +
+      '<a href="https://github.com/boyfriendofmiku-blip/daijia-chuxing/actions" target="_blank" style="color:#66bb6a;text-decoration:underline;">查看编译进度 →</a>';
+  }
+}
+checkLatestVersion();
+</script>
+</body>
+</html>

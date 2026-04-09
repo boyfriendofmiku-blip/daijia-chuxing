@@ -1476,6 +1476,8 @@ function _drawNavRoute(fromLat, fromLng) {
   var destLng = _navMapState.destLng;
   var destName = _navMapState.destName;
   
+  console.log('[NavMap] 开始规划路线:', fromLat, fromLng, '->', destLat, destLng);
+  
   // 清除旧路线
   if (_navMapState.routeLine) {
     _navMapState.routeLine.setMap(null);
@@ -1490,14 +1492,23 @@ function _drawNavRoute(fromLat, fromLng) {
   }
   
   // 使用高德导航
-  var policy = (AMap.DrivingPolicy && AMap.DrivingPolicy.LEAST_TIME) ? AMap.DrivingPolicy.LEAST_TIME : 0;
+  var policy = (typeof AMap !== 'undefined' && AMap.DrivingPolicy) ? AMap.DrivingPolicy.LEAST_TIME : 0;
   _currentDriving = new AMap.Driving({
     policy: policy,
     showTraffic: true,
     extensions: 'all'
   });
   
+  // 设置超时处理
+  var routeTimeout = setTimeout(function() {
+    console.warn('[NavMap] 路线规划超时');
+    // 超时后显示到达目的地的简单路线
+    _showSimpleRoute();
+  }, 8000);
+  
   _currentDriving.search([fromLng, fromLat], [destLng, destLat], function(status, result) {
+    clearTimeout(routeTimeout);
+    
     if (status === 'complete' && result.routes && result.routes.length > 0) {
       var route = result.routes[0];
       
@@ -1506,7 +1517,7 @@ function _drawNavRoute(fromLat, fromLng) {
         _navMapState.routeSteps = route.steps;
       }
       
-      // 绘制已行驶路线（灰色）
+      // 绘制已行驶路线（蓝色）
       var path = route.path;
       if (path && path.length > 0) {
         _navMapState.routeLine = new AMap.Polyline({
@@ -1531,15 +1542,70 @@ function _drawNavRoute(fromLat, fromLng) {
       _updateNavInstruction(route.steps, fromLat, fromLng);
       
       // 地图自适应
-      _navMapState.map.setFitView(_navMapState.routeLine, false, [60, 80, 60, 120]);
+      if (_navMapState.routeLine) {
+        _navMapState.map.setFitView(_navMapState.routeLine, false, [60, 80, 60, 120]);
+      }
       
       // 首次播报
       if (!_navMapState._routeAnnounced) {
         _navMapState._routeAnnounced = true;
         _speak('导航开始，目的地是' + destName + '，全程' + _formatDistance(distance));
       }
+    } else {
+      console.warn('[NavMap] 路线规划失败:', status, result);
+      _showSimpleRoute();
     }
   });
+}
+
+// 显示简单路线（当详细路线规划失败时）
+function _showSimpleRoute() {
+  if (!_navMapState) return;
+  
+  var fromLat = 0, fromLng = 0;
+  try {
+    var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
+    fromLat = parseFloat(pos.lat) || 0;
+    fromLng = parseFloat(pos.lng) || 0;
+  } catch(e) {}
+  
+  if (!fromLat || !fromLng) return;
+  
+  var destLat = _navMapState.destLat;
+  var destLng = _navMapState.destLng;
+  var destName = _navMapState.destName;
+  
+  // 绘制简单直线
+  _navMapState.routeLine = new AMap.Polyline({
+    path: [[fromLng, fromLat], [destLng, destLat]],
+    strokeColor: '#3777FF',
+    strokeWeight: 6,
+    strokeStyle: 'dashed',
+    lineJoin: 'round'
+  });
+  _navMapState.routeLine.setMap(_navMapState.map);
+  
+  // 计算直线距离
+  var dist = _calcDistance(fromLat, fromLng, destLat, destLng);
+  var distEl = document.getElementById('nav-distance');
+  if (distEl) distEl.textContent = _formatDistance(dist);
+  
+  var durEl = document.getElementById('nav-duration');
+  if (durEl) durEl.textContent = '≈ ' + Math.round(dist / 500) + ' 分钟'; // 假设500m/分钟
+  
+  // 更新导航提示
+  var instructionEl = document.getElementById('nav-instruction');
+  var iconEl = document.getElementById('nav-instruction-icon');
+  if (instructionEl) {
+    instructionEl.innerHTML = '<div style="font-size:14px;font-weight:600;color:#fff">沿道路向目的地行驶</div>' +
+      '<div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:4px">全程约 ' + _formatDistance(dist) + '</div>';
+  }
+  if (iconEl) iconEl.textContent = '➡️';
+  
+  // 地图自适应
+  _navMapState.map.setFitView();
+  
+  console.log('[NavMap] 显示简单路线，距离:', dist);
 }
 
 // 更新导航指令显示

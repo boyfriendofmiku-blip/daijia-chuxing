@@ -726,19 +726,40 @@ async function render() {
   bindEvents();
   
   // 页面后置初始化（地图等需要DOM渲染后初始化的组件）
-  // 如果地图API还未就绪，等待就绪后再初始化
-  var mapReady = typeof TMap !== 'undefined' || typeof AMap !== 'undefined';
-  if (mapReady) {
+  // 如果高德地图API已就绪，直接初始化
+  if (typeof AMap !== 'undefined' && window.__amapReady) {
     initPageExtras();
-  } else if (window.__tmapReady || window.__amapReady) {
-    initPageExtras();
-  } else {
-    // 监听地图API就绪事件
+  } else if (typeof AMap !== 'undefined' && !window.__amapReady) {
+    // AMap 已加载但 __amapReady 未触发，等待一下
+    var checkOnce = setInterval(function() {
+      if (window.__amapReady || window.__amapLoadFailed) {
+        clearInterval(checkOnce);
+        initPageExtras();
+      }
+    }, 100);
+    setTimeout(function() { clearInterval(checkOnce); initPageExtras(); }, 15000);
+  } else if (window.__amapReady) {
+    // AMap 还未加载但即将就绪
     var initExtrasOnce = function() {
       initPageExtras();
-      window.removeEventListener('tmap-ready', initExtrasOnce);
+      window.removeEventListener('amap-ready', initExtrasOnce);
     };
-    window.addEventListener('tmap-ready', initExtrasOnce);
+    window.addEventListener('amap-ready', initExtrasOnce);
+    // 超时保护：20秒后强制初始化
+    setTimeout(function() {
+      if (!window.__initPageExtrasExecuted) {
+        console.warn('地图API加载超时，强制初始化页面');
+        initPageExtras();
+        window.__initPageExtrasExecuted = true;
+      }
+    }, 20000);
+  } else {
+    // 监听高德地图就绪事件
+    var initExtrasOnce = function() {
+      initPageExtras();
+      window.removeEventListener('amap-ready', initExtrasOnce);
+    };
+    window.addEventListener('amap-ready', initExtrasOnce);
     // 超时保护：20秒后强制初始化
     setTimeout(function() {
       if (!window.__initPageExtrasExecuted) {
@@ -2669,24 +2690,30 @@ async function handleAction(action, dataset) {
 //  页面后置初始化 - 地图、动态组件等
 // ============================================================
 async function initPageExtras() {
-  // 检查地图API是否就绪（支持高德或腾讯地图）
-  if (typeof TMap === 'undefined' && typeof AMap === 'undefined') {
-    console.warn('地图API未就绪，跳过地图初始化');
+  // 检查高德地图 API 是否就绪
+  if (typeof AMap === 'undefined') {
+    console.warn('[Map] 高德地图API未就绪，跳过地图初始化');
     return;
   }
   
-  // 如果高德地图已就绪但TMap兼容层未就绪，等待一下
-  if (typeof AMap !== 'undefined' && typeof TMap === 'undefined') {
-    console.log('等待TMap兼容层就绪...');
+  // 如果地图已完全加载（__amapReady=true），直接初始化
+  // 否则等待地图加载完成
+  if (!window.__amapReady) {
+    console.log('[Map] 等待高德地图加载...');
     await new Promise(function(resolve) {
-      var checkTmap = setInterval(function() {
-        if (typeof TMap !== 'undefined') {
-          clearInterval(checkTmap);
+      if (window.__amapReady) { resolve(); return; }
+      var checkAmap = setInterval(function() {
+        if (window.__amapReady || window.__amapLoadFailed) {
+          clearInterval(checkAmap);
           resolve();
         }
       }, 100);
-      setTimeout(function() { clearInterval(checkTmap); resolve(); }, 5000);
+      setTimeout(function() { clearInterval(checkAmap); resolve(); }, 15000);
     });
+    if (window.__amapLoadFailed) {
+      console.warn('[Map] 高德地图加载失败');
+      return;
+    }
   }
   
   // 初始化订单详情页的路线地图 / 实时追踪地图

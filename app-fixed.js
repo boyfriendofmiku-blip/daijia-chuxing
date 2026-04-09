@@ -1196,22 +1196,34 @@ var _speechEnabled = true; // 语音开关
 var _currentDriving = null; // 当前导航实例
 
 function initNavMap(orderId) {
+  console.log('[NavMap] initNavMap 被调用, orderId:', orderId);
+  
   if (typeof AMap === 'undefined') {
+    console.log('[NavMap] AMap 未定义，等待...');
     showToast('地图加载中，请稍候...', '');
     setTimeout(function() { initNavMap(orderId); }, 2000);
     return;
   }
+  
+  console.log('[NavMap] AMap 已就绪');
 
   var container = document.getElementById('nav-amap-container');
+  console.log('[NavMap] 容器检查:', container ? '存在' : '不存在', 
+    container ? container.clientWidth + 'x' + container.clientHeight : '');
+  
   if (!container) {
+    console.log('[NavMap] 容器不存在，等待重试...');
     setTimeout(function() { initNavMap(orderId); }, 500);
     return;
   }
 
   if (container.clientWidth === 0 || container.clientHeight === 0) {
+    console.log('[NavMap] 容器尺寸为0，等待重试...');
     setTimeout(function() { initNavMap(orderId); }, 500);
     return;
   }
+  
+  console.log('[NavMap] 开始加载插件...');
 
   // 加载增强导航插件
   AMap.plugin(['AMap.Driving', 'AMap.Geolocation', 'AMap.ToolBar', 'AMap.HawkEye'], function() {

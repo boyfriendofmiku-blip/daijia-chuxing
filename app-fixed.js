@@ -693,6 +693,7 @@ function goBack() {
   // 清理当前页的追踪
   stopLiveTracking();
   stopArrivalCheck();
+  cleanupNavMap();
 
   if (State.pageHistory.length > 0) {
     var prev = State.pageHistory.pop();
@@ -722,6 +723,7 @@ async function render() {
       case 'driver-main':    app.innerHTML = await renderDriverMain(); break;
       case 'create-order':   app.innerHTML = renderCreateOrder(); break;
       case 'order-detail':   app.innerHTML = await renderOrderDetail(State.pageParams.orderId); break;
+      case 'nav-map':        app.innerHTML = await renderNavMapPage(State.pageParams.orderId); initNavMap(State.pageParams.orderId); break;
       case 'order-hall':     app.innerHTML = await renderOrderHall(); break;
       case 'driver-create-order': app.innerHTML = renderDriverCreateOrder(); break;
       case 'user-orders':    app.innerHTML = await renderUserOrders(); break;
@@ -1103,8 +1105,8 @@ async function renderOrderDetail(orderId) {
       routeMapHtml = '<div id="detail-route-map-wrapper" style="position:relative;margin-bottom:12px">' +
         '<div id="detail-live-map" class="detail-route-map"></div>' +
         '<button class="map-expand-btn" data-action="expand-map" data-map-id="detail-live-map">⛶</button>' +
-        // 导航按钮（司机视角）
-        (isDriver ? '<button id="nav-to-dest-btn" class="map-nav-btn" data-action="open-navigation" data-order-id="' + order.id + '" title="导航到目的地">🧭 导航</button>' : '') +
+        // 导航按钮（司机视角）—— 内嵌地图导航
+        (isDriver ? '<button id="nav-to-dest-btn" class="map-nav-btn" data-action="open-navigation-in-app" data-order-id="' + order.id + '" title="内嵌地图导航">🧭 导航</button>' : '') +
         '</div>' +
         // 实时状态栏
         '<div id="live-status-bar" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:10px;margin-bottom:10px;color:#fff;font-size:13px">' +
@@ -1170,6 +1172,288 @@ async function renderOrderDetail(orderId) {
       '</div>' +
       actionButtons +
     '</div>' +
+  '</div>';
+}
+
+// ============================================================
+//  司机端 - 初始化内嵌导航地图
+// ============================================================
+var _navMapState = null; // 导航地图状态
+
+function initNavMap(orderId) {
+  if (typeof AMap === 'undefined') {
+    showToast('地图加载中，请稍候...', '');
+    setTimeout(function() { initNavMap(orderId); }, 2000);
+    return;
+  }
+
+  var container = document.getElementById('nav-amap-container');
+  if (!container) return;
+
+  // 加载需要的插件
+  AMap.plugin(['AMap.Driving', 'AMap.Geolocation'], function() {
+    _doInitNavMap(orderId, container);
+  });
+}
+
+function _doInitNavMap(orderId, container) {
+  DB.getOrderById(orderId).then(function(order) {
+    if (!order || !order.toLat || !order.toLng) return;
+
+    var destLat = parseFloat(order.toLat);
+    var destLng = parseFloat(order.toLng);
+    var destName = order.to || '目的地';
+
+    // 获取司机当前位置
+    var startLat = 0, startLng = 0;
+    try {
+      var cachedPos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
+      startLat = parseFloat(cachedPos.lat) || 0;
+      startLng = parseFloat(cachedPos.lng) || 0;
+    } catch(e) {}
+
+    // 如果没有起始位置，使用高德定位
+    var useGeolocation = !startLat || !startLng;
+
+    // 创建地图（以终点为中心）
+    var center = [destLng, destLat];
+    if (startLat && startLng) {
+      center = [(startLng + destLng) / 2, (startLat + destLat) / 2];
+    }
+
+    var map = new AMap.Map('nav-amap-container', {
+      zoom: 13,
+      center: center,
+      mapStyle: 'amap://styles/normal',
+      resizeEnable: true
+    });
+
+    // 存储地图实例
+    _navMapState = { map: map, orderId: orderId, destLat: destLat, destLng: destLng, startMarker: null, routeLine: null };
+
+    // 终点标记
+    var destMarker = new AMap.Marker({
+      position: [destLng, destLat],
+      content: '<div style="background:#E74C3C;color:#fff;padding:6px 10px;border-radius:16px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🔴 ' + destName + '</div>',
+      offset: new AMap.Pixel(-40, -15)
+    });
+    destMarker.setMap(map);
+
+    // 司机位置标记（如果已有位置）
+    var driverMarker = null;
+    if (startLat && startLng) {
+      driverMarker = _updateDriverMarker(map, startLat, startLng, null);
+      _navMapState.startMarker = driverMarker;
+      map.setCenter([startLng, startLat]);
+    }
+
+    // 规划路线
+    if (startLat && startLng) {
+      _drawNavRoute(map, startLat, startLng, destLat, destLng);
+    } else {
+      // 无起始位置，先定位
+      _navMapState.map.setCenter([destLng, destLat]);
+    }
+
+    // 高德原生定位（更新司机位置）
+    var geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000 });
+    map.addControl(geolocation);
+
+    function _onLocationSuccess(result) {
+      if (!_navMapState || _navMapState.orderId !== orderId) return;
+      var lat = result.position.lat;
+      var lng = result.position.lng;
+      console.log('[NavMap] 定位成功:', lat, lng);
+
+      // 更新司机标记
+      if (_navMapState.startMarker) {
+        _navMapState.startMarker.setPosition([lng, lat]);
+      } else {
+        _navMapState.startMarker = _updateDriverMarker(map, lat, lng, null);
+        // 首次定位后画路线
+        _drawNavRoute(map, lat, lng, _navMapState.destLat, _navMapState.destLng);
+      }
+      _navMapState.map.setCenter([lng, lat]);
+
+      // 更新坐标显示
+      var coordsEl = document.getElementById('nav-coords');
+      if (coordsEl) coordsEl.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+    }
+
+    function _onLocationError() {
+      console.warn('[NavMap] 定位失败');
+    }
+
+    geolocation.getCurrentPosition(function(status, result) {
+      if (status === 'complete') _onLocationSuccess(result);
+      else _onLocationError();
+    });
+
+    // 定期更新司机位置（复用 GPS 上报逻辑，每 5 秒）
+    _navMapState._watchId = setInterval(function() {
+      if (!_navMapState || _navMapState.orderId !== orderId) {
+        clearInterval(_navMapState._watchId);
+        return;
+      }
+      try {
+        var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
+        var lat2 = parseFloat(pos.lat);
+        var lng2 = parseFloat(pos.lng);
+        if (lat2 && lng2) {
+          if (_navMapState.startMarker) {
+            _navMapState.startMarker.setPosition([lng2, lat2]);
+          } else {
+            _navMapState.startMarker = _updateDriverMarker(_navMapState.map, lat2, lng2, null);
+            _drawNavRoute(_navMapState.map, lat2, lng2, _navMapState.destLat, _navMapState.destLng);
+          }
+          _navMapState.map.setCenter([lng2, lat2]);
+          var coordsEl2 = document.getElementById('nav-coords');
+          if (coordsEl2) coordsEl2.textContent = lat2.toFixed(5) + ', ' + lng2.toFixed(5);
+        }
+      } catch(e) {}
+    }, 5000);
+
+    // 点击地图：重新规划从点击位置到终点的路线
+    map.on('click', function(e) {
+      if (!_navMapState) return;
+      var clickLat = e.lnglat.getLat();
+      var clickLng = e.lnglat.getLng();
+      if (_navMapState.startMarker) {
+        _navMapState.startMarker.setPosition([clickLng, clickLat]);
+      } else {
+        _navMapState.startMarker = _updateDriverMarker(map, clickLat, clickLng, null);
+      }
+      _drawNavRoute(map, clickLat, clickLng, _navMapState.destLat, _navMapState.destLng);
+      map.setCenter([clickLng, clickLat]);
+    });
+  });
+}
+
+function _updateDriverMarker(map, lat, lng, label) {
+  var marker = new AMap.Marker({
+    position: [lng, lat],
+    content: '<div style="background:#2196F3;color:#fff;padding:6px 10px;border-radius:16px;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🧑‍✈️ 您的位置</div>',
+    offset: new AMap.Pixel(-40, -15)
+  });
+  marker.setMap(map);
+  return marker;
+}
+
+function _drawNavRoute(map, fromLat, fromLng, toLat, toLng) {
+  if (!_navMapState) return;
+  // 清除旧路线
+  if (_navMapState.routeLine) {
+    _navMapState.routeLine.setMap(null);
+    _navMapState.routeLine = null;
+  }
+
+  var policy = (AMap.DrivingPolicy && AMap.DrivingPolicy.LEAST_TIME) ? AMap.DrivingPolicy.LEAST_TIME : 0;
+  var driving = new AMap.Driving({ policy: policy });
+  driving.search([fromLng, fromLat], [toLng, toLat], function(status, result) {
+    if (status === 'complete' && result.routes && result.routes.length > 0) {
+      var route = result.routes[0];
+      var path = route.path;
+      if ((!path || path.length === 0) && route.steps) {
+        path = [];
+        route.steps.forEach(function(step) {
+          if (step.path) path = path.concat(step.path);
+        });
+      }
+      if (path && path.length > 0) {
+        var polyline = new AMap.Polyline({
+          path: path,
+          strokeColor: '#3777FF',
+          strokeWeight: 6,
+          strokeStyle: 'solid',
+          lineJoin: 'round'
+        });
+        polyline.setMap(map);
+        _navMapState.routeLine = polyline;
+      }
+      // 更新距离和时间
+      var distance = parseFloat(route.distance) || 0;
+      var duration = parseFloat(route.time || route.duration) || 0;
+      var distEl = document.getElementById('nav-distance');
+      if (distEl) {
+        var distText = distance >= 1000 ? (distance / 1000).toFixed(1) + ' km' : distance + ' m';
+        var durText = duration >= 60 ? Math.round(duration / 60) + ' min' : duration + ' s';
+        distEl.textContent = distText;
+        distEl.nextElementSibling.textContent = durText;
+      }
+      map.setFitView(polyline, false, [60, 80, 60, 120]);
+    }
+  });
+}
+
+// 退出导航时清理
+function cleanupNavMap() {
+  if (_navMapState) {
+    if (_navMapState._watchId) clearInterval(_navMapState._watchId);
+    if (_navMapState.map) _navMapState.map.destroy();
+    _navMapState = null;
+  }
+}
+
+// ============================================================
+//  司机端 - 内嵌导航地图页
+// ============================================================
+async function renderNavMapPage(orderId) {
+  var order = await DB.getOrderById(orderId);
+  if (!order) return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button></div><div class="page-content"><p>订单不存在</p></div></div>';
+
+  var destLat = order.toLat;
+  var destLng = order.toLng;
+  var destName = order.to || '目的地';
+
+  if (!destLat || !destLng) {
+    return '<div class="page">' +
+      '<div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>导航</h2></div>' +
+      '<div class="page-content"><div class="empty-state"><div class="empty-icon">📍</div><p>订单缺少目的地坐标</p></div></div>' +
+      '</div>';
+  }
+
+  var destAddr = destName;
+  var startLat = 0, startLng = 0;
+
+  // 尝试从 localStorage 读取司机最新位置
+  try {
+    var cachedPos = localStorage.getItem('dj_driver_pos');
+    if (cachedPos) {
+      var pos = JSON.parse(cachedPos);
+      startLat = parseFloat(pos.lat) || 0;
+      startLng = parseFloat(pos.lng) || 0;
+    }
+  } catch(e) {}
+
+  return '<div class="page nav-map-page" style="padding:0">' +
+    // 顶部信息栏
+    '<div style="position:absolute;top:0;left:0;right:0;z-index:200;background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.1)">' +
+      '<button class="back-btn" data-action="go-back" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">←</button>' +
+      '<div style="flex:1">' +
+        '<div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:2px">🧭 内嵌导航</div>' +
+        '<div style="font-size:14px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + destAddr + '</div>' +
+      '</div>' +
+      '<div id="nav-info-badge" style="background:rgba(255,255,255,0.1);border-radius:20px;padding:6px 12px;font-size:13px;color:#fff;text-align:center;min-width:70px">' +
+        '<div id="nav-distance" style="font-size:16px;font-weight:700">--</div>' +
+        '<div style="font-size:11px;opacity:0.7">--</div>' +
+      '</div>' +
+    '</div>' +
+    // 地图区域
+    '<div id="nav-amap-container" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:100"></div>' +
+    // 底部状态栏
+    '<div style="position:absolute;bottom:0;left:0;right:0;z-index:200;background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);padding:12px 16px 20px;border-top:1px solid rgba(255,255,255,0.1)">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+        '<div id="nav-dot" style="width:10px;height:10px;border-radius:50%;background:#4CAF50;box-shadow:0 0 8px #4CAF50;animation:pulse 2s infinite;flex-shrink:0"></div>' +
+        '<div style="font-size:14px;color:#fff;font-weight:500">📍 实时定位中</div>' +
+        '<div style="flex:1"></div>' +
+        '<div id="nav-coords" style="font-size:12px;color:rgba(255,255,255,0.5)">--</div>' +
+      '</div>' +
+      '<div style="font-size:12px;color:rgba(255,255,255,0.5);line-height:1.5">提示：跟着地图蓝色路线行驶即可到达目的地</div>' +
+    '</div>' +
+    '<style>' +
+      '@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }' +
+      '.nav-map-page .page-header{display:none}' +
+    '</style>' +
   '</div>';
 }
 
@@ -2367,53 +2651,11 @@ async function handleAction(action, dataset) {
       break;
     }
 
-    // 打开导航（司机端）
-    case 'open-navigation': {
-      var navOrderId = dataset.orderId;
-      console.log('[DEBUG] open-navigation clicked, orderId:', navOrderId);
-      var navOrder = await DB.getOrderById(navOrderId);
-      console.log('[DEBUG] order data:', navOrder);
-      if (!navOrder) { showToast('订单不存在', 'error'); break; }
-      
-      var destLat = navOrder.toLat, destLng = navOrder.toLng;
-      var destName = navOrder.to || '目的地';
-      console.log('[DEBUG] navigation coords:', destLat, destLng, 'destName:', destName);
-      
-      var ua = navigator.userAgent.toLowerCase();
-      var isAndroid = /android/.test(ua);
-      var isIOS = /iphone|ipad/.test(ua);
-      var isWechat = /micromessenger/.test(ua);
-
-      // 统一使用高德网页版导航（支持浏览器、APK WebView、微信）
-      // callnative=1 会在手机上自动唤起高德 App（如已安装）
-      var navUrl = '';
-      if (destLat && destLng) {
-        navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + encodeURIComponent(destName) + '&mode=car&callnative=1&src=daijia';
-      } else {
-        navUrl = 'https://uri.amap.com/search?keywords=' + encodeURIComponent(destName);
-        showToast('订单缺少目的地坐标，已用地址搜索', '');
-      }
-
-      console.log('[DEBUG] opening navUrl:', navUrl);
-      showToast('正在打开导航...', '');
-
-      // 优先尝试 Capacitor Browser 插件（原生外部浏览器）
-      var capBrowser = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser;
-      var capApp2 = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-      if (capBrowser && typeof capBrowser.open === 'function') {
-        capBrowser.open({ url: navUrl }).catch(function(e) {
-          console.warn('[DEBUG] Browser.open failed:', e);
-          window.location.href = navUrl;
-        });
-      } else if (capApp2 && typeof capApp2.openUrl === 'function') {
-        capApp2.openUrl({ url: navUrl }).catch(function(e) {
-          console.warn('[DEBUG] App.openUrl failed:', e);
-          window.location.href = navUrl;
-        });
-      } else {
-        // 普通浏览器：location.href 在 WebView 中也能工作
-        window.location.href = navUrl;
-      }
+    // 打开内嵌导航地图（司机端）
+    case 'open-navigation-in-app': {
+      var navOrderId2 = dataset.orderId;
+      console.log('[DEBUG] open-navigation-in-app clicked, orderId:', navOrderId2);
+      navigate('nav-map', { orderId: navOrderId2 });
       break;
     }
 

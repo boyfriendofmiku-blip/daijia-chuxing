@@ -184,7 +184,9 @@ function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) 
 }
 
 
-// ============ 地图全屏展开 ============
+
+
+// ============ 地图全屏展开（使用高德地图） ============
 function openMapFullscreen() {
   // 检查地图加载状态
   if (window.__amapLoadFailed) {
@@ -200,14 +202,14 @@ function openMapFullscreen() {
     }
     return;
   }
-  if (!window.__detailRouteMap) {
-    showToast('地图尚未初始化完成', 'error');
-    console.log('[Map] 地图实例未就绪，detailRouteMap:', window.__detailRouteMap);
-    return;
-  }
 
   // 获取订单数据
   var order = window.__lastDetailOrder || {};
+  if (!order.fromLat || !order.fromLng || !order.toLat || !order.toLng) {
+    showToast('订单缺少位置信息', 'error');
+    return;
+  }
+
   var fromAddr = order.from || '出发地';
   var toAddr = order.to || '目的地';
   var routeInfo = window.__detailRouteInfo || {};
@@ -257,70 +259,48 @@ function openMapFullscreen() {
       if (!container) return;
 
       var order = window.__lastDetailOrder || {};
-      var fsMap = new TMap.Map(container, {
-        center: new TMap.LatLng(order.fromLat, order.fromLng),
-        zoom: 13,
-        pitch: 30,
-        mapStyleId: 'style1'
+      var centerLng = (parseFloat(order.fromLng) + parseFloat(order.toLng)) / 2;
+      var centerLat = (parseFloat(order.fromLat) + parseFloat(order.toLat)) / 2;
+
+      var fsMap = new AMap.Map('map-fs-container', {
+        zoom: 12,
+        center: [centerLng, centerLat],
+        mapStyle: 'amap://styles/normal'
       });
 
       // 起终点标记
-      new TMap.MultiMarker({
-        map: fsMap,
-        geometries: [
-          {
-            id: 'start',
-            position: new TMap.LatLng(order.fromLat, order.fromLng),
-            content: '<div style="background:#27AE60;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(39,174,96,0.4)">A</div>'
-          },
-          {
-            id: 'end',
-            position: new TMap.LatLng(order.toLat, order.toLng),
-            content: '<div style="background:#E74C3C;color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(231,76,60,0.4)">B</div>'
-          }
-        ]
+      var startMarker = new AMap.Marker({
+        position: [parseFloat(order.fromLng), parseFloat(order.fromLat)],
+        content: '<div style="background:#27AE60;color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(39,174,96,0.4);border:3px solid #fff">A</div>',
+        offset: new AMap.Pixel(-18, -18)
       });
 
-      // 重新规划路线
-      new TMap.service.DrivingService({
-        complete: function(result) {
-          if (result && result.result && result.result.routes && result.result.routes.length > 0) {
-            var route = result.result.routes[0];
-            var path = [];
-            if (route.steps) {
-              route.steps.forEach(function(step) {
-                if (step.polyline) path = path.concat(step.polyline);
-              });
-            }
-            if (path.length > 0) {
-              new TMap.MultiPolyline({
-                map: fsMap,
-                styles: {
-                  'style': new TMap.PolylineStyle({
-                    color: '#3777FF',
-                    width: 8,
-                    borderWidth: 2,
-                    borderColor: '#FFF',
-                    lineCap: 'round',
-                    lineJoin: 'round'
-                  })
-                },
-                geometries: [{ id: 'line', styleId: 'style', paths: path }]
-              });
-            }
-            if (route.bounds) {
-              try {
-                fsMap.fitBounds(new TMap.LatLngBounds(
-                  new TMap.LatLng(route.bounds.southwest.lat, route.bounds.southwest.lng),
-                  new TMap.LatLng(route.bounds.northeast.lat, route.bounds.northeast.lng)
-                ), { padding: 80 });
-              } catch(e) {}
+      var endMarker = new AMap.Marker({
+        position: [parseFloat(order.toLng), parseFloat(order.toLat)],
+        content: '<div style="background:#E74C3C;color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;box-shadow:0 2px 12px rgba(231,76,60,0.4);border:3px solid #fff">B</div>',
+        offset: new AMap.Pixel(-18, -18)
+      });
+
+      fsMap.add([startMarker, endMarker]);
+
+      // 规划驾车路线
+      AMap.plugin('AMap.Driving', function() {
+        var driving = new AMap.Driving({
+          map: fsMap,
+          panel: null,
+          outlineColor: '#3777FF'
+        });
+
+        driving.search(
+          new AMap.LngLat(parseFloat(order.fromLng), parseFloat(order.fromLat)),
+          new AMap.LngLat(parseFloat(order.toLng), parseFloat(order.toLat)),
+          function(status, result) {
+            if (status === 'complete' && result.routes && result.routes.length > 0) {
+              // 自动调整视野
+              fsMap.setFitView();
             }
           }
-        }
-      }).search({
-        from: new TMap.LatLng(order.fromLat, order.fromLng),
-        to: new TMap.LatLng(order.toLat, order.toLng)
+        );
       });
 
       window.__fsMap = fsMap;
@@ -334,7 +314,6 @@ function openMapFullscreen() {
   setTimeout(function() {
     var closeBtn = document.getElementById('map-fs-close');
     if (closeBtn) {
-      // 添加触摸反馈
       closeBtn.addEventListener('touchstart', function(e) {
         e.stopPropagation();
         this.style.transform = 'scale(0.95)';
@@ -343,20 +322,19 @@ function openMapFullscreen() {
         e.stopPropagation();
         this.style.transform = '';
       });
-      
       closeBtn.addEventListener('click', function() {
         closeMapFullscreen();
       });
     }
-    
-    // 点击空白区域也关闭（底部信息区除外）
+
+    // 点击地图区域不关闭，点击 overlay 背景关闭
     overlay.addEventListener('click', function(e) {
-      if (e.target.id === 'map-fs-container' || e.target === overlay) {
+      if (e.target === overlay) {
         closeMapFullscreen();
       }
     });
-    
-    // 手机上的触摸关闭（滑动关闭）
+
+    // 手机上的触摸关闭（向下滑动关闭）
     var startY = 0;
     overlay.addEventListener('touchstart', function(e) {
       startY = e.touches[0].clientY;
@@ -364,13 +342,12 @@ function openMapFullscreen() {
     overlay.addEventListener('touchmove', function(e) {
       var currentY = e.touches[0].clientY;
       var diff = currentY - startY;
-      // 向下滑动超过100px关闭
       if (diff > 100) {
         closeMapFullscreen();
       }
     });
   }, 100);
-  
+
   // 关闭全屏地图的函数
   function closeMapFullscreen() {
     overlay.classList.remove('active');
@@ -606,23 +583,6 @@ function navigate(page, params, skipHistory) {
   // 更新浏览器历史（支持原生返回按钮）
   if (!skipHistory) {
     history.pushState({ page: page, params: params }, '', '#' + page);
-  }
-}
-
-// 返回上一页
-function goBack() {
-  console.log('[DEBUG] goBack called. pageHistory length:', State.pageHistory.length, 'currentPage:', State.currentPage);
-  // 清理当前页的追踪
-  stopLiveTracking();
-  stopArrivalCheck();
-
-  if (State.pageHistory.length > 0) {
-    var prev = State.pageHistory.pop();
-    State.currentPage = prev.page;
-    State.pageParams = prev.params || {};
-    console.log('[DEBUG] goBack navigating to:', prev.page);
-    history.pushState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
-    render();
   }
 }
 
@@ -1033,9 +993,8 @@ async function renderOrderDetail(orderId) {
   const isUser = State.currentUser && State.currentUser.type === 'user';
   const isDriver = State.currentUser && State.currentUser.type === 'driver';
   const isStaff = State.currentUser && State.currentUser.type === 'staff';
-  let backAction = 'user-main';
-  if (isDriver) backAction = 'driver-orders';
-  if (isStaff) backAction = 'staff-orders';
+  // 统一使用 go-back，通过历史栈返回，避免与手机返回键冲突
+  const backAction = 'go-back';
 
   // 步骤进度
   const steps = [

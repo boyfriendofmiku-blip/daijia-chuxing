@@ -57,10 +57,8 @@ jobs:
       - name: Inject Android permissions and network config into AndroidManifest.xml
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />
-          <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-          <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-          <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />|' "$MANIFEST"
+          # 添加位置权限
+          sed -i 's|</manifest>|  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n</manifest>|' "$MANIFEST"
           # 添加网络配置允许加载高德地图
           sed -i 's|android:theme="@style/AppTheme">|android:theme="@style/AppTheme" android:usesCleartextTraffic="true">|' "$MANIFEST"
           echo "=== 权限和网络配置注入完成 ==="

@@ -1226,9 +1226,19 @@ function initNavMap(orderId) {
   console.log('[NavMap] 开始加载插件...');
 
   // 加载增强导航插件
-  AMap.plugin(['AMap.Driving', 'AMap.Geolocation', 'AMap.ToolBar', 'AMap.HawkEye'], function() {
+  AMap.plugin(['AMap.Driving', 'AMap.Geolocation', 'AMap.ToolBar'], function() {
+    console.log('[NavMap] 插件加载成功');
     _doInitNavMap(orderId, container);
   });
+  
+  // 插件加载超时处理（5秒）
+  setTimeout(function() {
+    if (_navMapState && _navMapState.orderId === orderId && !_navMapState._pluginsLoaded) {
+      console.warn('[NavMap] 插件加载超时，尝试直接初始化...');
+      _navMapState._pluginsLoaded = true;
+      _doInitNavMap(orderId, container);
+    }
+  }, 5000);
 }
 
 // 语音播报函数
@@ -1319,8 +1329,15 @@ function _formatDuration(seconds) {
 }
 
 function _doInitNavMap(orderId, container) {
+  console.log('[NavMap] _doInitNavMap 被调用, orderId:', orderId);
+  
   DB.getOrderById(orderId).then(function(order) {
-    if (!order || !order.toLat || !order.toLng) return;
+    console.log('[NavMap] 获取订单结果:', order ? '成功' : '失败', order ? order.id : '');
+    
+    if (!order || !order.toLat || !order.toLng) {
+      console.warn('[NavMap] 订单无效或缺少目的地坐标');
+      return;
+    }
 
     var destLat = parseFloat(order.toLat);
     var destLng = parseFloat(order.toLng);

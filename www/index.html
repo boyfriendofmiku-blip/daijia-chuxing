@@ -57,13 +57,22 @@
     window._AMapConfig = { key: '700c467755db139a0780ef3c86276a83' };
     window._AMapSecurityConfig = { securityJsCode: '31035fabae3227f92fdb9e90eb35490f' };
     window.__amapReady = false;
+    window.__amapLoadFailed = false;
     window.onAMapReady = function() {
       window.__amapReady = true;
-      console.log('高德地图API已就绪');
+      console.log('[AMap] 高德地图API已就绪');
       window.dispatchEvent(new Event('amap-ready'));
     };
+    // 高德地图加载超时（15秒）
+    window.__amapLoadTimeout = setTimeout(function() {
+      if (!window.__amapReady) {
+        window.__amapLoadFailed = true;
+        console.warn('[AMap] 高德地图API加载超时（15秒），可能无法在当前环境使用');
+        window.dispatchEvent(new Event('amap-load-failed'));
+      }
+    }, 15000);
   </script>
-  <script type="text/javascript" src="https://webapi.amap.com/maps?v=1.4.15&key=700c467755db139a0780ef3c86276a83&callback=onAMapReady"></script>
+  <script type="text/javascript" src="https://webapi.amap.com/maps?v=1.4.15&key=700c467755db139a0780ef3c86276a83&callback=onAMapReady" onerror="console.error('[AMap] 高德地图脚本加载失败')"></script>
   <script>
     
     // 监听Supabase加载失败事件

@@ -6,7 +6,10 @@
     "androidScheme": "https",
     "allowNavigation": [
       "*.amap.com",
-      "uri.amap.com"
+      "*.qq.com",
+      "uri.amap.com",
+      "webapi.amap.com",
+      "restapi.amap.com"
     ]
   },
   "android": {

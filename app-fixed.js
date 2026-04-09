@@ -183,10 +183,26 @@ function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) 
   return null;
 }
 
+
 // ============ 地图全屏展开 ============
 function openMapFullscreen() {
-  if (!window.__detailRouteMap || typeof AMap === 'undefined') {
-    showToast('地图尚未加载完成', 'error');
+  // 检查地图加载状态
+  if (window.__amapLoadFailed) {
+    showToast('地图加载失败，请检查网络后重试', 'error');
+    return;
+  }
+  if (typeof AMap === 'undefined') {
+    showToast('地图尚未加载完成，请稍候...', 'error');
+    console.log('[Map] AMap未定义，等待加载...');
+    // 尝试等待地图就绪
+    if (window.__amapReady) {
+      setTimeout(function() { openMapFullscreen(); }, 1000);
+    }
+    return;
+  }
+  if (!window.__detailRouteMap) {
+    showToast('地图尚未初始化完成', 'error');
+    console.log('[Map] 地图实例未就绪，detailRouteMap:', window.__detailRouteMap);
     return;
   }
 

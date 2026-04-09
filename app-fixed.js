@@ -2379,44 +2379,40 @@ async function handleAction(action, dataset) {
       var destName = navOrder.to || '目的地';
       console.log('[DEBUG] navigation coords:', destLat, destLng, 'destName:', destName);
       
-      var navUrl = '';
       var ua = navigator.userAgent.toLowerCase();
-      var isCapacitor = window.CapacitorApp !== undefined;
       var isAndroid = /android/.test(ua);
       var isIOS = /iphone|ipad/.test(ua);
       var isWechat = /micromessenger/.test(ua);
-      
+
+      // 统一使用高德网页版导航（支持浏览器、APK WebView、微信）
+      // callnative=1 会在手机上自动唤起高德 App（如已安装）
+      var navUrl = '';
       if (destLat && destLng) {
-        if (isAndroid && !isWechat) {
-          // Android 原生 App：用高德 URL Scheme
-          navUrl = 'amapuri://navigation?to=' + destLng + ',' + destLat + ',' + encodeURIComponent(destName) + '&callnative=1';
-        } else if (isIOS && !isWechat) {
-          // iOS：用 URL Scheme 打开高德
-          navUrl = 'iosamap://navi?sourceApplication=daijia&lat=' + destLat + '&lon=' + destLng + '&dev=0&style=0';
-        } else {
-          // 微信/支付宝/PC浏览器：用网页版
-          navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + encodeURIComponent(destName) + '&mode=car&callnative=1';
-        }
+        navUrl = 'https://uri.amap.com/navigation?to=' + destLng + ',' + destLat + ',' + encodeURIComponent(destName) + '&mode=car&callnative=1&src=daijia';
       } else {
-        // 没有坐标时使用地址搜索
         navUrl = 'https://uri.amap.com/search?keywords=' + encodeURIComponent(destName);
         showToast('订单缺少目的地坐标，已用地址搜索', '');
       }
-      
+
       console.log('[DEBUG] opening navUrl:', navUrl);
-      
-      // 使用 Capacitor App 插件打开 URL（如果可用），否则直接 window.open
-      var capApp = window.CapacitorApp || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) || null;
-      if (isCapacitor && capApp && typeof capApp.openUrl === 'function') {
-        capApp.openUrl({ url: navUrl }).then(function(result) {
-          console.log('[DEBUG] Capacitor openUrl success:', result);
-        }).catch(function(err) {
-          console.warn('[DEBUG] Capacitor openUrl failed:', err);
-          window.open(navUrl, '_blank');
+      showToast('正在打开导航...', '');
+
+      // 优先尝试 Capacitor Browser 插件（原生外部浏览器）
+      var capBrowser = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser;
+      var capApp2 = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+      if (capBrowser && typeof capBrowser.open === 'function') {
+        capBrowser.open({ url: navUrl }).catch(function(e) {
+          console.warn('[DEBUG] Browser.open failed:', e);
+          window.location.href = navUrl;
+        });
+      } else if (capApp2 && typeof capApp2.openUrl === 'function') {
+        capApp2.openUrl({ url: navUrl }).catch(function(e) {
+          console.warn('[DEBUG] App.openUrl failed:', e);
+          window.location.href = navUrl;
         });
       } else {
-        // 网页/浏览器环境：直接打开
-        window.open(navUrl, '_blank');
+        // 普通浏览器：location.href 在 WebView 中也能工作
+        window.location.href = navUrl;
       }
       break;
     }

@@ -3,7 +3,14 @@
   "appName": "代驾出行",
   "webDir": "www",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "allowNavigation": [
+      "*.amap.com",
+      "uri.amap.com"
+    ]
+  },
+  "android": {
+    "allowMixedContent": true
   },
   "plugins": {
     "SplashScreen": {

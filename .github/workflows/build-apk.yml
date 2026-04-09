@@ -71,25 +71,7 @@ jobs:
       - name: Create network security config for map APIs
         run: |
           mkdir -p android/app/src/main/res/xml
-          cat > android/app/src/main/res/xml/network_security_config.xml << 'NSCEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true">
-        <trust-anchors>
-            <certificates src="system" />
-            <certificates src="user" />
-        </trust-anchors>
-    </base-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">webapi.amap.com</domain>
-        <domain includeSubdomains="true">restapi.amap.com</domain>
-        <domain includeSubdomains="true">m.amap.com</domain>
-        <domain includeSubdomains="true">www.amap.com</domain>
-        <domain includeSubdomains="true">uri.amap.com</domain>
-        <domain includeSubdomains="true">fs.indoorcloud.com</domain>
-    </domain-config>
-</network-security-config>
-NSCEOF
+          printf '<?xml version="1.0" encoding="utf-8"?>\n<network-security-config>\n    <base-config cleartextTrafficPermitted="true">\n        <trust-anchors>\n            <certificates src="system" />\n            <certificates src="user" />\n        </trust-anchors>\n    </base-config>\n    <domain-config cleartextTrafficPermitted="true">\n        <domain includeSubdomains="true">webapi.amap.com</domain>\n        <domain includeSubdomains="true">restapi.amap.com</domain>\n        <domain includeSubdomains="true">m.amap.com</domain>\n        <domain includeSubdomains="true">www.amap.com</domain>\n        <domain includeSubdomains="true">uri.amap.com</domain>\n        <domain includeSubdomains="true">fs.indoorcloud.com</domain>\n    </domain-config>\n</network-security-config>\n' > android/app/src/main/res/xml/network_security_config.xml
           echo "=== 网络安全配置已创建 ==="
           cat android/app/src/main/res/xml/network_security_config.xml
 

@@ -2405,17 +2405,17 @@ async function handleAction(action, dataset) {
       
       console.log('[DEBUG] opening navUrl:', navUrl);
       
-      // 使用 Capacitor App 插件打开 URL（如果可用）
-      if (isCapacitor && window.CapacitorApp.openUrl) {
-        window.CapacitorApp.openUrl({ url: navUrl }).then(function(result) {
+      // 使用 Capacitor App 插件打开 URL（如果可用），否则直接 window.open
+      var capApp = window.CapacitorApp || (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) || null;
+      if (isCapacitor && capApp && typeof capApp.openUrl === 'function') {
+        capApp.openUrl({ url: navUrl }).then(function(result) {
           console.log('[DEBUG] Capacitor openUrl success:', result);
         }).catch(function(err) {
           console.warn('[DEBUG] Capacitor openUrl failed:', err);
-          // fallback 到 window.open
           window.open(navUrl, '_blank');
         });
       } else {
-        // 非 Capacitor 环境
+        // 网页/浏览器环境：直接打开
         window.open(navUrl, '_blank');
       }
       break;

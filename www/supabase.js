@@ -132,8 +132,29 @@ const DB = {
   // 用户
   async getUsers() { return fetchUsers(); },
   async getDrivers() { return (await fetchUsers()).filter(u => u.role === 'driver'); },
+  async getDriverById(id) { return (await fetchUsers()).find(u => String(u.id) === String(id) && u.role === 'driver') || null; },
   async getStaff() { return (await fetchUsers()).filter(u => u.role === 'admin' || u.role === 'staff'); },
   async getPassengers() { return (await fetchUsers()).filter(u => u.role === 'passenger'); },
+
+  // 司机实时位置（全部在线司机）
+  async getDriverLocations() {
+    try {
+      const { data, error } = await sb()
+        .from('driver_locations')
+        .select('*')
+        .gt('updated_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()); // 5分钟内活跃
+      if (error || !data) return [];
+      return data.map(function(d) {
+        return {
+          driverId: String(d.driver_id),
+          lat: d.lat,
+          lng: d.lng,
+          accuracy: d.accuracy || 0,
+          updatedAt: d.updated_at
+        };
+      });
+    } catch(e) { return []; }
+  },
 
   // 订单
   async getOrders() { return fetchOrders(); },

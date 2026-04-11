@@ -2064,92 +2064,160 @@ function initHallMap() {
 function _refreshHallMapData() {
   if (!_hallMapState) return;
   
+  // 司机状态颜色配置
+  var statusColors = {
+    '接单中': '#52c41a',  // 绿色
+    '空闲': '#1890ff',     // 蓝色
+    '休息': '#faad14',     // 橙色
+    '离线': '#8c8c8c'      // 灰色
+  };
+  
+  // 创建带姓名和状态的标记内容
+  function createDriverMarkerContent(name, status, color) {
+    var shortName = name.length > 3 ? name.substring(0, 3) + '...' : name;
+    var statusText = status || '空闲';
+    return '<div style="position:relative">' +
+      '<div style="background:' + color + ';border-radius:50%;width:36px;height:36px;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">🚗</div>' +
+      '<div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:' + color + ';color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3)">' + statusText + '</div>' +
+      '<div style="position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3)">' + shortName + '</div>' +
+    '</div>';
+  }
+  
   DB.getDriverLocations().then(function(locs) {
-    DB.getOrders().then(function(orders) {
-      var pendingOrders = orders.filter(function(o) { return o.status === 'pending'; });
-      var drivers = {}; // id -> driver info
-      
-      // 更新司机位置
-      locs.forEach(function(loc) {
-        if (!loc.lat || !loc.lng) return;
-        var lat = parseFloat(loc.lat);
-        var lng = parseFloat(loc.lng);
+    DB.getDrivers().then(function(allDrivers) {
+      DB.getOrders().then(function(orders) {
+        var pendingOrders = orders.filter(function(o) { return o.status === 'pending'; });
         
-        if (_hallMapState.driverMarkers[loc.driverId]) {
-          _hallMapState.driverMarkers[loc.driverId].setPosition([lng, lat]);
-        } else {
-          // 获取司机信息
-          DB.getDriverById(loc.driverId).then(function(driver) {
-            var name = driver ? (driver.name || '司机') : '司机';
+        // 计算每个司机的状态
+        var driverStatusMap = {}; // driverId -> status
+        allDrivers.forEach(function(d) {
+          var driverId = String(d.id);
+          // 检查司机是否有活跃订单
+          var hasActiveOrder = orders.some(function(o) {
+            return String(o.driverId) === driverId && (o.status === 'accepted' || o.status === 'ongoing');
+          });
+          // 检查司机是否在线（在 driver_locations 中）
+          var isOnline = locs.some(function(loc) { return String(loc.driverId) === driverId; });
+          
+          if (!isOnline) {
+            driverStatusMap[driverId] = '离线';
+          } else if (hasActiveOrder) {
+            driverStatusMap[driverId] = '接单中';
+          } else {
+            driverStatusMap[driverId] = '空闲';
+          }
+        });
+        
+        var driversOnline = {}; // id -> true
+        
+        // 更新司机位置
+        locs.forEach(function(loc) {
+          if (!loc.lat || !loc.lng) return;
+          var lat = parseFloat(loc.lat);
+          var lng = parseFloat(loc.lng);
+          var driverId = loc.driverId;
+          var driver = allDrivers.find(function(d) { return String(d.id) === driverId; });
+          var name = driver ? (driver.name || '司机') : '司机';
+          var status = driverStatusMap[driverId] || '空闲';
+          var color = statusColors[status] || '#1890ff';
+          
+          if (_hallMapState.driverMarkers[driverId]) {
+            _hallMapState.driverMarkers[driverId].setPosition([lng, lat]);
+            // 更新标记内容
+            _hallMapState.driverMarkers[driverId].setContent(createDriverMarkerContent(name, status, color));
+            _hallMapState.driverMarkers[driverId].setTitle(name + ' - ' + status);
+          } else {
             var marker = new AMap.Marker({
               position: [lng, lat],
-              content: '<div style="background:#2196F3;border-radius:50%;width:28px;height:28px;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🚗</div>',
-              title: name,
-              offset: new AMap.Pixel(-14, -14)
+              content: createDriverMarkerContent(name, status, color),
+              title: name + ' - ' + status,
+              offset: new AMap.Pixel(-18, -18)
             });
             _hallMapState.map.add(marker);
-            _hallMapState.driverMarkers[loc.driverId] = marker;
-          });
-        }
-        drivers[loc.driverId] = true;
-      });
-      
-      // 清理已下线的司机
-      Object.keys(_hallMapState.driverMarkers).forEach(function(did) {
-        if (!drivers[did]) {
-          _hallMapState.map.remove(_hallMapState.driverMarkers[did]);
-          delete _hallMapState.driverMarkers[did];
-        }
-      });
-      
-      // 更新待接订单标记
-      var currentOrderIds = {};
-      pendingOrders.forEach(function(o) {
-        if (!o.from_lat || !o.from_lng) return;
-        var lat = parseFloat(o.from_lat);
-        var lng = parseFloat(o.from_lng);
-        currentOrderIds[o.id] = true;
+            _hallMapState.driverMarkers[driverId] = marker;
+          }
+          driversOnline[driverId] = true;
+        });
         
-        if (_hallMapState.orderMarkers[o.id]) {
-          _hallMapState.orderMarkers[o.id].setPosition([lng, lat]);
-        } else {
-          var marker = new AMap.Marker({
-            position: [lng, lat],
-            content: '<div style="background:#FF5722;border-radius:50%;width:28px;height:28px;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.3)">📍</div>',
-            title: o.from || '待接单',
-            offset: new AMap.Pixel(-14, -14)
-          });
-          marker.on('click', function() {
-            // 滚动到对应订单卡片
-            var card = document.querySelector('[data-order-id="' + o.id + '"]');
-            if (card) {
-              card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              card.style.boxShadow = '0 0 0 3px #FF5722';
-              setTimeout(function() { card.style.boxShadow = ''; }, 2000);
-            }
-          });
-          _hallMapState.map.add(marker);
-          _hallMapState.orderMarkers[o.id] = marker;
+        // 清理已下线的司机
+        Object.keys(_hallMapState.driverMarkers).forEach(function(did) {
+          if (!driversOnline[did]) {
+            _hallMapState.map.remove(_hallMapState.driverMarkers[did]);
+            delete _hallMapState.driverMarkers[did];
+          }
+        });
+        
+        // 更新待接订单标记
+        var currentOrderIds = {};
+        pendingOrders.forEach(function(o) {
+          if (!o.from_lat || !o.from_lng) return;
+          var lat = parseFloat(o.from_lat);
+          var lng = parseFloat(o.from_lng);
+          currentOrderIds[o.id] = true;
+          
+          if (_hallMapState.orderMarkers[o.id]) {
+            _hallMapState.orderMarkers[o.id].setPosition([lng, lat]);
+          } else {
+            var marker = new AMap.Marker({
+              position: [lng, lat],
+              content: '<div style="background:#FF5722;border-radius:50%;width:32px;height:32px;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.3)">📍</div>',
+              title: o.from || '待接单',
+              offset: new AMap.Pixel(-16, -16)
+            });
+            marker.on('click', function() {
+              // 滚动到对应订单卡片
+              var card = document.querySelector('[data-order-id="' + o.id + '"]');
+              if (card) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.style.boxShadow = '0 0 0 3px #FF5722';
+                setTimeout(function() { card.style.boxShadow = ''; }, 2000);
+              }
+            });
+            _hallMapState.map.add(marker);
+            _hallMapState.orderMarkers[o.id] = marker;
+          }
+        });
+        
+        // 清理已消失的订单标记
+        Object.keys(_hallMapState.orderMarkers).forEach(function(oid) {
+          if (!currentOrderIds[oid]) {
+            _hallMapState.map.remove(_hallMapState.orderMarkers[oid]);
+            delete _hallMapState.orderMarkers[oid];
+          }
+        });
+        
+        // 更新按钮数字
+        var btn = document.getElementById('hall-map-toggle-btn');
+        if (btn) {
+          btn.textContent = '📍 ' + pendingOrders.length + ' 单';
         }
+        
+        // 添加图例
+        _updateHallMapLegend();
+        
+        console.log('[HallMap] 刷新: ' + Object.keys(_hallMapState.driverMarkers).length + ' 司机, ' + Object.keys(_hallMapState.orderMarkers).length + ' 待接单');
       });
-      
-      // 清理已消失的订单标记
-      Object.keys(_hallMapState.orderMarkers).forEach(function(oid) {
-        if (!currentOrderIds[oid]) {
-          _hallMapState.map.remove(_hallMapState.orderMarkers[oid]);
-          delete _hallMapState.orderMarkers[oid];
-        }
-      });
-      
-      // 更新按钮数字
-      var btn = document.getElementById('hall-map-toggle-btn');
-      if (btn) {
-        btn.textContent = '📍 ' + pendingOrders.length + ' 单';
-      }
-      
-      console.log('[HallMap] 刷新: ' + Object.keys(_hallMapState.driverMarkers).length + ' 司机, ' + Object.keys(_hallMapState.orderMarkers).length + ' 待接单');
     });
   });
+}
+
+// 添加/更新地图图例
+function _updateHallMapLegend() {
+  var existingLegend = document.getElementById('hall-map-legend');
+  if (existingLegend) return; // 已存在则不重复添加
+  
+  var legendHtml = '<div id="hall-map-legend" style="position:absolute;top:70px;right:12px;z-index:300;background:rgba(255,255,255,0.95);border-radius:10px;padding:10px 14px;box-shadow:0 2px 10px rgba(0,0,0,0.15);font-size:11px">' +
+    '<div style="font-weight:600;margin-bottom:6px;color:#333">司机状态</div>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="width:12px;height:12px;border-radius:50%;background:#52c41a;flex-shrink:0"></span><span style="color:#666">接单中</span></div>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="width:12px;height:12px;border-radius:50%;background:#1890ff;flex-shrink:0"></span><span style="color:#666">空闲</span></div>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="width:12px;height:12px;border-radius:50%;background:#faad14;flex-shrink:0"></span><span style="color:#666">休息</span></div>' +
+    '<div style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:50%;background:#8c8c8c;flex-shrink:0"></span><span style="color:#666">离线</span></div>' +
+  '</div>';
+  
+  var mapDiv = document.getElementById('hall-main-map');
+  if (mapDiv) {
+    mapDiv.insertAdjacentHTML('beforebegin', legendHtml);
+  }
 }
 
 function _subscribeHallRealtime() {

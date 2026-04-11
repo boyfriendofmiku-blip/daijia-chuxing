@@ -715,7 +715,11 @@ async function render() {
       case 'create-order':   app.innerHTML = renderCreateOrder(); break;
       case 'order-detail':   app.innerHTML = await renderOrderDetail(State.pageParams.orderId); break;
       case 'nav-map':        app.innerHTML = await renderNavMapPage(State.pageParams.orderId); initNavMap(State.pageParams.orderId); break;
-      case 'order-hall':     cleanupHallMap(); app.innerHTML = await renderOrderHall(); initHallMap(); break;
+      case 'order-hall':     
+        cleanupHallMap(); 
+        app.innerHTML = await renderOrderHall(); 
+        try { initHallMap(); } catch(e) { console.error('[HallMap] 初始化失败:', e); }
+        break;
       case 'driver-create-order': app.innerHTML = renderDriverCreateOrder(); break;
       case 'user-orders':    app.innerHTML = await renderUserOrders(); break;
       case 'driver-orders':  app.innerHTML = await renderDriverOrders(); break;
@@ -2156,8 +2160,21 @@ function _subscribeHallRealtime() {
     _hallMapState.subscription.unsubscribe();
   }
   
+  // 获取可用的 supabase 客户端
+  var supabaseClient = null;
+  try {
+    supabaseClient = window.DB && window.DB.supabase;
+  } catch(e) {
+    console.warn('[HallMap] Supabase 客户端不可用，跳过实时订阅');
+    return;
+  }
+  if (!supabaseClient) {
+    console.warn('[HallMap] Supabase 客户端不可用，跳过实时订阅');
+    return;
+  }
+  
   // 订阅 driver_locations 变化
-  _hallMapState.subscription = window.DB.supabase
+  _hallMapState.subscription = supabaseClient
     .channel('hall-drivers')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_locations' }, function(payload) {
       console.log('[HallMap] 司机位置更新:', payload);

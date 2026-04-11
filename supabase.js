@@ -635,6 +635,18 @@ const DB = {
 // 将DB对象挂载到window，确保其他文件可以访问
 window.DB = DB;
 
+// 暴露原始supabase客户端，用于实时订阅等高级操作
+// 使用 getter 延迟初始化，确保 _sb 已就绪
+Object.defineProperty(window.DB, 'supabase', {
+  get: function() {
+    return _sb(); // _sb() 内部会处理未初始化的情况
+  },
+  configurable: true,
+  enumerable: true
+});
+// 兼容性别名
+window._sb = _sb;
+
 // 监听Supabase SDK加载成功事件，重新初始化client
 window.addEventListener('supabase-loaded', function() {
   console.log('Supabase SDK加载成功，初始化client');

@@ -1361,8 +1361,10 @@ function _doInitNavMap(orderId, container) {
       viewMode: '2D'
     });
 
-    // 添加地图控件
-    map.addControl(new AMap.ToolBar({ position: 'right-bottom' }));
+    // 添加地图控件（仅当插件已加载时）
+    if (typeof AMap.ToolBar !== 'undefined') {
+      try { map.addControl(new AMap.ToolBar({ position: 'right-bottom' })); } catch(e) {}
+    }
     
     // 存储地图实例
     _navMapState = {
@@ -1576,84 +1578,108 @@ function _drawNavRoute(fromLat, fromLng) {
   if (_currentDriving) {
     _currentDriving = null;
   }
-  
-  // 使用高德导航
-  var policy = (typeof AMap !== 'undefined' && AMap.DrivingPolicy) ? AMap.DrivingPolicy.LEAST_TIME : 0;
-  _currentDriving = new AMap.Driving({
-    policy: policy,
-    showTraffic: true,
-    extensions: 'all'
-  });
-  
-  // 设置超时处理
-  var routeTimeout = setTimeout(function() {
-    console.warn('[NavMap] 路线规划超时');
-    // 超时后显示到达目的地的简单路线
-    _showSimpleRoute();
-  }, 8000);
-  
-  _currentDriving.search([fromLng, fromLat], [destLng, destLat], function(status, result) {
-    clearTimeout(routeTimeout);
+
+  // 封装实际路线规划逻辑
+  function doSearch() {
+    console.log('[NavMap] AMap.Driving 可用，开始搜索路线...');
+    var policy = (AMap.DrivingPolicy && AMap.DrivingPolicy.LEAST_TIME) ? AMap.DrivingPolicy.LEAST_TIME : 0;
+    _currentDriving = new AMap.Driving({
+      policy: policy,
+      showTraffic: true,
+      extensions: 'all'
+    });
     
-    if (status === 'complete' && result.routes && result.routes.length > 0) {
-      var route = result.routes[0];
+    var routeTimeout = setTimeout(function() {
+      console.warn('[NavMap] 路线规划超时，切换简单路线');
+      _showSimpleRoute(fromLat, fromLng);
+    }, 8000);
+    
+    _currentDriving.search([fromLng, fromLat], [destLng, destLat], function(status, result) {
+      clearTimeout(routeTimeout);
       
-      // 存储路线步骤用于语音播报
-      if (route.steps) {
-        _navMapState.routeSteps = route.steps;
+      if (status === 'complete' && result.routes && result.routes.length > 0) {
+        var route = result.routes[0];
+        console.log('[NavMap] 路线规划成功');
+        
+        if (route.steps) {
+          _navMapState.routeSteps = route.steps;
+        }
+        
+        var path = route.path;
+        if ((!path || path.length === 0) && route.steps) {
+          path = [];
+          route.steps.forEach(function(step) {
+            if (step.path) path = path.concat(step.path);
+          });
+        }
+        
+        if (path && path.length > 0) {
+          _navMapState.routeLine = new AMap.Polyline({
+            path: path,
+            strokeColor: '#3777FF',
+            strokeWeight: 8,
+            strokeStyle: 'solid',
+            lineJoin: 'round'
+          });
+          _navMapState.routeLine.setMap(_navMapState.map);
+        }
+        
+        var distance = parseFloat(route.distance) || 0;
+        var duration = parseFloat(route.time || route.duration) || 0;
+        var distEl = document.getElementById('nav-distance');
+        var durEl = document.getElementById('nav-duration');
+        if (distEl) distEl.textContent = _formatDistance(distance);
+        if (durEl) durEl.textContent = _formatDuration(duration);
+        
+        _updateNavInstruction(route.steps, fromLat, fromLng);
+        
+        if (_navMapState.routeLine) {
+          _navMapState.map.setFitView(_navMapState.routeLine, false, [60, 80, 60, 120]);
+        }
+        
+        if (!_navMapState._routeAnnounced) {
+          _navMapState._routeAnnounced = true;
+          _speak('导航开始，目的地是' + destName + '，全程' + _formatDistance(distance));
+        }
+      } else {
+        console.warn('[NavMap] 路线规划失败:', status);
+        _showSimpleRoute(fromLat, fromLng);
       }
-      
-      // 绘制已行驶路线（蓝色）
-      var path = route.path;
-      if (path && path.length > 0) {
-        _navMapState.routeLine = new AMap.Polyline({
-          path: path,
-          strokeColor: '#3777FF',
-          strokeWeight: 8,
-          strokeStyle: 'solid',
-          lineJoin: 'round'
-        });
-        _navMapState.routeLine.setMap(_navMapState.map);
+    });
+  }
+
+  // 判断 AMap.Driving 是否已加载
+  if (typeof AMap.Driving !== 'undefined') {
+    doSearch();
+  } else {
+    console.log('[NavMap] AMap.Driving 未加载，正在加载插件...');
+    AMap.plugin(['AMap.Driving'], function() {
+      console.log('[NavMap] AMap.Driving 加载完成');
+      doSearch();
+    });
+    // 插件加载超时后备
+    setTimeout(function() {
+      if (!_navMapState || _navMapState.routeSteps) return; // 已规划则不处理
+      if (typeof AMap.Driving === 'undefined') {
+        console.warn('[NavMap] AMap.Driving 插件加载超时，使用简单路线');
+        _showSimpleRoute(fromLat, fromLng);
       }
-      
-      // 更新距离和时间
-      var distance = parseFloat(route.distance) || 0;
-      var duration = parseFloat(route.time || route.duration) || 0;
-      var distEl = document.getElementById('nav-distance');
-      var durEl = document.getElementById('nav-duration');
-      if (distEl) distEl.textContent = _formatDistance(distance);
-      if (durEl) durEl.textContent = _formatDuration(duration);
-      
-      // 显示导航提示
-      _updateNavInstruction(route.steps, fromLat, fromLng);
-      
-      // 地图自适应
-      if (_navMapState.routeLine) {
-        _navMapState.map.setFitView(_navMapState.routeLine, false, [60, 80, 60, 120]);
-      }
-      
-      // 首次播报
-      if (!_navMapState._routeAnnounced) {
-        _navMapState._routeAnnounced = true;
-        _speak('导航开始，目的地是' + destName + '，全程' + _formatDistance(distance));
-      }
-    } else {
-      console.warn('[NavMap] 路线规划失败:', status, result);
-      _showSimpleRoute();
-    }
-  });
+    }, 6000);
+  }
 }
 
 // 显示简单路线（当详细路线规划失败时）
-function _showSimpleRoute() {
+function _showSimpleRoute(fromLat, fromLng) {
   if (!_navMapState) return;
   
-  var fromLat = 0, fromLng = 0;
-  try {
-    var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
-    fromLat = parseFloat(pos.lat) || 0;
-    fromLng = parseFloat(pos.lng) || 0;
-  } catch(e) {}
+  // 优先使用传入的坐标，否则从缓存读取
+  if (!fromLat || !fromLng) {
+    try {
+      var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
+      fromLat = parseFloat(pos.lat) || 0;
+      fromLng = parseFloat(pos.lng) || 0;
+    } catch(e) {}
+  }
   
   if (!fromLat || !fromLng) return;
   
@@ -1769,17 +1795,6 @@ function _calcDistance(lat1, lng1, lat2, lng2) {
   return R * c;
 }
 
-// 更新司机标记（兼容旧函数）
-function _updateDriverMarker(map, lat, lng, label) {
-  var marker = new AMap.Marker({
-    position: [lng, lat],
-    content: '<div style="background:#2196F3;color:#fff;padding:6px 10px;border-radius:16px;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🧑‍✈️ 您的位置</div>',
-    offset: new AMap.Pixel(-40, -15)
-  });
-  marker.setMap(map);
-  return marker;
-}
-
 // 退出导航时清理
 function cleanupNavMap() {
   if (_navMapState) {
@@ -1792,71 +1807,6 @@ function cleanupNavMap() {
   }
   _currentDriving = null;
   _lastSpokenInstruction = '';
-}
-
-function _updateDriverMarker(map, lat, lng, label) {
-  var marker = new AMap.Marker({
-    position: [lng, lat],
-    content: '<div style="background:#2196F3;color:#fff;padding:6px 10px;border-radius:16px;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🧑‍✈️ 您的位置</div>',
-    offset: new AMap.Pixel(-40, -15)
-  });
-  marker.setMap(map);
-  return marker;
-}
-
-function _drawNavRoute(map, fromLat, fromLng, toLat, toLng) {
-  if (!_navMapState) return;
-  // 清除旧路线
-  if (_navMapState.routeLine) {
-    _navMapState.routeLine.setMap(null);
-    _navMapState.routeLine = null;
-  }
-
-  var policy = (AMap.DrivingPolicy && AMap.DrivingPolicy.LEAST_TIME) ? AMap.DrivingPolicy.LEAST_TIME : 0;
-  var driving = new AMap.Driving({ policy: policy });
-  driving.search([fromLng, fromLat], [toLng, toLat], function(status, result) {
-    if (status === 'complete' && result.routes && result.routes.length > 0) {
-      var route = result.routes[0];
-      var path = route.path;
-      if ((!path || path.length === 0) && route.steps) {
-        path = [];
-        route.steps.forEach(function(step) {
-          if (step.path) path = path.concat(step.path);
-        });
-      }
-      if (path && path.length > 0) {
-        var polyline = new AMap.Polyline({
-          path: path,
-          strokeColor: '#3777FF',
-          strokeWeight: 6,
-          strokeStyle: 'solid',
-          lineJoin: 'round'
-        });
-        polyline.setMap(map);
-        _navMapState.routeLine = polyline;
-      }
-      // 更新距离和时间
-      var distance = parseFloat(route.distance) || 0;
-      var duration = parseFloat(route.time || route.duration) || 0;
-      var distEl = document.getElementById('nav-distance');
-      if (distEl) {
-        var distText = distance >= 1000 ? (distance / 1000).toFixed(1) + ' km' : distance + ' m';
-        var durText = duration >= 60 ? Math.round(duration / 60) + ' min' : duration + ' s';
-        distEl.textContent = distText;
-        distEl.nextElementSibling.textContent = durText;
-      }
-      map.setFitView(polyline, false, [60, 80, 60, 120]);
-    }
-  });
-}
-
-// 退出导航时清理
-function cleanupNavMap() {
-  if (_navMapState) {
-    if (_navMapState._watchId) clearInterval(_navMapState._watchId);
-    if (_navMapState.map) _navMapState.map.destroy();
-    _navMapState = null;
-  }
 }
 
 // ============================================================

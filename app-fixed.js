@@ -1472,6 +1472,16 @@ function _switchNavPhase(newPhase) {
     // 更新UI
     _updateNavPhaseUI(NAV_PHASE_DRIVING, _navMapState.finalName);
 
+    // 更新外部导航链接（指向阶段2目的地）
+    var amapBtn = document.getElementById('nav-amap-btn');
+    var appleBtn = document.getElementById('nav-apple-btn');
+    if (amapBtn) {
+      amapBtn.href = 'amap://navi?sourceApplication=代驾出行&lat=' + _navMapState.finalLat + '&lng=' + _navMapState.finalLng + '&name=' + encodeURIComponent(_navMapState.finalName) + '&dev=1';
+    }
+    if (appleBtn) {
+      appleBtn.href = 'http://maps.apple.com/?daddr=' + _navMapState.finalLat + ',' + _navMapState.finalLng + '&dirflg=d';
+    }
+
     // 清除旧路线，重新规划
     _navMapState._routeAnnounced = false;
     if (_navMapState.routeLine) {
@@ -1632,6 +1642,15 @@ function _onNavLocationSuccess(lat, lng, heading, orderId) {
     _navMapState.map.setZoom(16);
     // 首次定位后规划路线
     _drawNavRoute(lat, lng);
+  } else {
+    // 阶段1且司机偏离中心超过500米时自动跟随（骑行接客时）
+    if (_navMapState.phase === NAV_PHASE_RIDING) {
+      var center = _navMapState.map.getCenter();
+      var distToCenter = _calcDistance(lat, lng, center.getLat(), center.getLng());
+      if (distToCenter > 500) {
+        _navMapState.map.setCenter([lng, lat]);
+      }
+    }
   }
 }
 
@@ -1959,10 +1978,10 @@ async function renderNavMapPage(orderId) {
         '<div style="flex:1"></div>' +
         '<div id="nav-coords" style="font-size:11px;color:rgba(255,255,255,0.5)">--</div>' +
       '</div>' +
-      // 外部导航按钮（指向当前阶段目标）
+      // 外部导航按钮（指向当前阶段目标，阶段切换时动态更新）
       '<div style="display:flex;gap:10px">' +
-        '<a href="' + amapNavUrl + '" style="flex:1;background:linear-gradient(135deg,#52c41a,#73d13d);color:#fff;padding:10px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px rgba(82,196,26,0.3)">📱 高德导航</a>' +
-        '<a href="' + appleNavUrl + '" style="flex:1;background:linear-gradient(135deg,#1890ff,#40a9ff);color:#fff;padding:10px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px rgba(24,144,255,0.3)">🍎 Apple Maps</a>' +
+        '<a id="nav-amap-btn" href="' + amapNavUrl + '" style="flex:1;background:linear-gradient(135deg,#52c41a,#73d13d);color:#fff;padding:10px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px rgba(82,196,26,0.3)">📱 高德导航</a>' +
+        '<a id="nav-apple-btn" href="' + appleNavUrl + '" style="flex:1;background:linear-gradient(135deg,#1890ff,#40a9ff);color:#fff;padding:10px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px rgba(24,144,255,0.3)">🍎 Apple Maps</a>' +
       '</div>' +
     '</div>' +
     '<style>' +

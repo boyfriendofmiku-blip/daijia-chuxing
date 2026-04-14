@@ -4,7 +4,7 @@
 ================================================ */
 
 // 当前版本号（每次发布请更新）
-window.APP_VERSION = 'v2.2-20260401-b';
+window.APP_VERSION = 'v2.3-20260414';
 
 // 高德地图兼容层：让旧代码（TMap）兼容高德 API
 window.addEventListener('amap-ready', function() {
@@ -2427,7 +2427,13 @@ async function renderOrderHall() {
         distText = o.distance >= 1000 ? (o.distance / 1000).toFixed(1) + ' km' : o.distance + ' m';
       }
       const distHtml = distText ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📏 ' + distText + '</div>' : '';
-      ordersHtml += '<div class="hall-order-card">' +
+      // 新订单脉冲标记（30秒内创建）
+      var isNewOrder = false;
+      if (o.created_at) {
+        var orderTime = new Date(o.created_at).getTime();
+        if (!isNaN(orderTime) && (Date.now() - orderTime) < 30000) isNewOrder = true;
+      }
+      ordersHtml += '<div class="hall-order-card' + (isNewOrder ? ' new-order' : '') + '">' +
         '<div class="hall-header"><div><div class="order-user">👤 ' + pName + '</div>' +
           (pPhone ? '<div class="order-meta">📞 ' + pPhone + '</div>' : '') +
           '<div class="order-meta">' + o.createdAt + '</div></div>' +
@@ -2754,7 +2760,28 @@ function renderManageAddresses() {
 // ============================================================
 //  事件绑定
 // ============================================================
+// ============================================================
+//  按钮涟漪效果
+// ============================================================
+function _addRipple(el) {
+  el.style.position = 'relative'; el.style.overflow = 'hidden';
+  el.addEventListener('click', function(e) {
+    var ripple = document.createElement('span');
+    ripple.className = 'ripple';
+    var rect = el.getBoundingClientRect();
+    var size = Math.max(rect.width, rect.height);
+    ripple.style.width = ripple.style.height = size + 'px';
+    ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+    ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+    el.appendChild(ripple);
+    setTimeout(function() { ripple.remove(); }, 600);
+  });
+}
+
 function bindEvents() {
+  // 为所有 .btn 按钮添加涟漪效果
+  document.querySelectorAll('.btn').forEach(function(btn) { _addRipple(btn); });
+
   // 通用 data-action 路由
   document.querySelectorAll('[data-action]').forEach(function(el) {
     el.addEventListener('click', function(e) {

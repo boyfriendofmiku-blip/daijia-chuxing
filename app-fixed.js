@@ -1934,19 +1934,19 @@ async function renderNavMapPage(orderId) {
   var order = await DB.getOrderById(orderId);
   if (!order) return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button></div><div class="page-content"><p>订单不存在</p></div></div>';
 
-  var destLat = order.toLat;
-  var destLng = order.toLng;
-  var destName = order.to || '目的地';
-
-  if (!destLat || !destLng) {
+  // 根据当前阶段决定导航目标（accepted阶段去接人，不需要目的地坐标）
+  var isRiding = (order.status === 'accepted');
+  if (!isRiding && (!order.toLat || !order.toLng)) {
     return '<div class="page">' +
       '<div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>导航</h2></div>' +
       '<div class="page-content"><div class="empty-state"><div class="empty-icon">📍</div><p>订单缺少目的地坐标</p></div></div>' +
       '</div>';
   }
 
-  // 根据当前阶段决定显示名称和导航目标
-  var isRiding = (order.status === 'accepted');
+  var destLat = order.toLat || 0;
+  var destLng = order.toLng || 0;
+  var destName = order.to || '目的地';
+
   var navTargetLat  = isRiding ? (order.fromLat || destLat) : destLat;
   var navTargetLng  = isRiding ? (order.fromLng || destLng) : destLng;
   var navTargetName = isRiding ? (order.from || '乘客位置') : destName;

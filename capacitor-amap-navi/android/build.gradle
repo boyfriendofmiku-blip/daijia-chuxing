@@ -1,0 +1,35 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.daijia.amapnavi'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 34
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+repositories {
+    mavenCentral()
+    google()
+}
+
+dependencies {
+    // 高德地图基础定位 SDK（~3MB，精准GPS）
+    implementation 'com.amap.api:location:6.1.0.2'
+
+    // 高德地图 2D 地图 SDK（用于内嵌地图，~30MB）
+    implementation 'com.amap.api:map2d:6.1.0.3'
+
+    // Capacitor core
+    implementation 'com.getcapacitor:core:8.3.0'
+    annotationProcessor 'com.getcapacitor:core:8.3.0'
+}

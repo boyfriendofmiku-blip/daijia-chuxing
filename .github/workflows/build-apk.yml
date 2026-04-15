@@ -44,6 +44,7 @@ jobs:
           cp style.css www/
           cp sw.js www/
           cp manifest.json www/
+          cp capacitor-amap-navi.js www/ 2>/dev/null || true
           cp -r icons www/
 
       - name: Install dependencies

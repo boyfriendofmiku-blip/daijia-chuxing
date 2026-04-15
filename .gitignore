@@ -3,7 +3,8 @@ node_modules/
 .vercel/
 .DS_Store
 Thumbs.db
-*.log
 android/
 *.apk
 generated-images/
+# 例外：插件的 android 目录需要提交
+!capacitor-amap-navi/android/

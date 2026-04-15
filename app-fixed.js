@@ -1413,7 +1413,14 @@ function _doInitNavMap(orderId, container) {
       destMarker: null,
       heading: 0, // 当前朝向
       routeSteps: [], // 路线步骤
-      currentStepIndex: 0
+      currentStepIndex: 0,
+      // 供 _doLaunchNavi 使用的便捷字段（会在位置更新和阶段切换时更新）
+      myLat: center[1],
+      myLng: center[0],
+      isRiding: isRiding,
+      targetLat: isRiding ? fromLat : destLat,
+      targetLng: isRiding ? fromLng : destLng,
+      targetName: isRiding ? fromName : destName
     };
 
     // 更新顶部阶段提示UI
@@ -1481,6 +1488,11 @@ function _switchNavPhase(newPhase) {
     _navMapState.destLat  = _navMapState.finalLat;
     _navMapState.destLng  = _navMapState.finalLng;
     _navMapState.destName = _navMapState.finalName;
+    // 更新导航目标字段（供 _doLaunchNavi 使用）
+    _navMapState.isRiding = false;
+    _navMapState.targetLat = _navMapState.finalLat;
+    _navMapState.targetLng = _navMapState.finalLng;
+    _navMapState.targetName = _navMapState.finalName;
 
     // 移除上车地标记
     if (_navMapState.pickupMarker) {
@@ -1559,7 +1571,29 @@ function _initNavGeolocation(orderId) {
     cachedLng = parseFloat(pos.lng) || 0;
   } catch(e) {}
   
-  // 优先：使用 Capacitor 原生 Geolocation（APP 内真实 GPS）
+  // 最高优先：使用 AmapNavi 插件（高德原生 GPS + 可调起导航 App）
+  if (window.AmapNavi && window.AmapNavi._plugin) {
+    console.log('[NavMap] 使用 AmapNavi 原生定位...');
+    AmapNavi.startTracking(function(loc) {
+      if (!_navMapState || _navMapState.orderId !== orderId) return;
+      _onNavLocationSuccess(loc.latitude, loc.longitude, loc.bearing || 0, orderId);
+      // 同时更新缓存
+      localStorage.setItem('dj_driver_pos', JSON.stringify({ lat: loc.latitude, lng: loc.longitude }));
+    }).catch(function(err) {
+      console.warn('[NavMap] AmapNavi 启动失败，尝试备用定位:', err);
+      _initNavGeolocationFallback(orderId, cachedLat, cachedLng);
+    });
+    return;
+  }
+  
+  // 备用定位入口（AmapNavi 不可用时调用）
+  _initNavGeolocationFallback(orderId, cachedLat, cachedLng);
+}
+
+function _initNavGeolocationFallback(orderId, cachedLat, cachedLng) {
+  console.log('[NavMap] 使用备用定位...');
+  
+  // 次优先：使用 Capacitor 原生 Geolocation（APP 内真实 GPS）
   var capGeo = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
   if (capGeo) {
     console.log('[NavMap] 使用 Capacitor 原生定位...');
@@ -1669,6 +1703,9 @@ function _onNavLocationSuccess(lat, lng, heading, orderId) {
     _navMapState.driverMarker.setAngle(heading);
   }
   _navMapState.heading = heading || _navMapState.heading;
+  // 同步更新 myLat/myLng（供 _doLaunchNavi 使用）
+  _navMapState.myLat = lat;
+  _navMapState.myLng = lng;
   
   // 更新坐标显示
   var coordsEl = document.getElementById('nav-coords');
@@ -2020,8 +2057,8 @@ async function renderNavMapPage(orderId) {
       '</div>' +
       // 外部导航按钮（指向当前阶段目标，阶段切换时动态更新）
       '<div style="display:flex;gap:10px">' +
-        '<a id="nav-amap-btn" href="' + amapNavUrl + '" style="flex:1;background:linear-gradient(135deg,#52c41a,#73d13d);color:#fff;padding:10px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px rgba(82,196,26,0.3)">📱 高德导航</a>' +
-        '<a id="nav-apple-btn" href="' + appleNavUrl + '" style="flex:1;background:linear-gradient(135deg,#1890ff,#40a9ff);color:#fff;padding:10px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 10px rgba(24,144,255,0.3)">🍎 Apple Maps</a>' +
+        '<button id="nav-amap-btn" onclick="window._doLaunchNavi()" style="flex:1;background:linear-gradient(135deg,#52c41a,#73d13d);color:#fff;padding:10px;border-radius:10px;font-size:13px;font-weight:600;border:none;box-shadow:0 2px 10px rgba(82,196,26,0.3);cursor:pointer">📱 高德导航</button>' +
+        '<button id="nav-apple-btn" onclick="window._doLaunchAppleNavi()" style="flex:1;background:linear-gradient(135deg,#1890ff,#40a9ff);color:#fff;padding:10px;border-radius:10px;font-size:13px;font-weight:600;border:none;box-shadow:0 2px 10px rgba(24,144,255,0.3);cursor:pointer">🍎 Apple Maps</button>' +
       '</div>' +
     '</div>' +
     '<style>' +
@@ -3890,6 +3927,77 @@ function _updateDriverMarker(dLat, dLng, order, map) {
   map.setCenter([dLng, dLat]);
 }
 
+// ============================================================
+//  导航启动器 - 使用 AmapNavi 原生插件
+// ============================================================
+
+/** 调起高德导航 App（原生逐条语音导航） */
+window._doLaunchNavi = async function() {
+  var s = _navMapState;
+  if (!s) { showToast('请先进入导航页面', 'warning'); return; }
+  
+  var waypoints = [];
+  // 骑行阶段：起点=司机当前位置，终点=乘客位置
+  // 代驾阶段：起点=司机当前位置，终点=目的地
+  if (s.isRiding) {
+    // 骑行接客
+    waypoints = [
+      { latitude: s.myLat, longitude: s.myLng, name: '我的位置' },
+      { latitude: s.targetLat, longitude: s.targetLng, name: s.targetName }
+    ];
+  } else {
+    // 代驾送客
+    waypoints = [
+      { latitude: s.myLat, longitude: s.myLng, name: '出发地' },
+      { latitude: s.targetLat, longitude: s.targetLng, name: s.targetName }
+    ];
+  }
+  
+  var mode = s.isRiding ? 2 : 0; // 骑行=2, 驾车=0
+  
+  try {
+    // 确保 AmapNavi 已初始化
+    if (window.AmapNavi && !window.AmapNavi._initialized) {
+      var apiKey = (window._AMapConfig && window._AMapConfig.key) || '700c467755db139a0780ef3c86276a83';
+      await window.AmapNavi.init(apiKey);
+    }
+    
+    var result = await window.AmapNavi.startNavigation({
+      waypoints: waypoints,
+      mode: mode
+    });
+    
+    if (result && result.success) {
+      showToast('已调起高德导航 🧭', 'success');
+    }
+  } catch(e) {
+    console.error('[AmapNavi] 启动失败:', e);
+    // 降级：打开 URL
+    var amapUrl = 'amap://navi?sourceApplication=代驾出行&lat=' + s.targetLat + '&lng=' + s.targetLng + '&name=' + encodeURIComponent(s.targetName) + '&dev=1';
+    var intentUrl = (window.CapacitorApp) 
+      ? amapUrl 
+      : amapUrl;
+    var openFn = window.CapacitorApp && window.CapacitorApp.openUrl 
+      ? window.CapacitorApp.openUrl.bind(window.CapacitorApp) 
+      : function(url) { window.open(url, '_blank'); };
+    openFn(amapUrl);
+    showToast('正在打开高德导航...', '');
+  }
+};
+
+/** 调起 Apple Maps 导航 */
+window._doLaunchAppleNavi = function() {
+  var s = _navMapState;
+  if (!s) { showToast('请先进入导航页面', 'warning'); return; }
+  
+  var url = 'http://maps.apple.com/?daddr=' + s.targetLat + ',' + s.targetLng + '&dirflg=d';
+  var openFn = window.CapacitorApp && window.CapacitorApp.openUrl 
+    ? window.CapacitorApp.openUrl.bind(window.CapacitorApp) 
+    : function(url) { window.open(url, '_blank'); };
+  openFn(url);
+  showToast('正在打开 Apple Maps...', '');
+};
+
 // 清除追踪定时器（页面切走时调用）
 function stopLiveTracking() {
   if (_liveTrackTimer) { clearInterval(_liveTrackTimer); _liveTrackTimer = null; }
@@ -4184,6 +4292,19 @@ function _getInitialPage() {
 function _startApp() {
   initBackHandler();
   startRealtime();
+  
+  // 初始化高德导航插件（如果可用）
+  (async function() {
+    if (window.AmapNavi && !window.AmapNavi._initialized) {
+      try {
+        var apiKey = (window._AMapConfig && window._AMapConfig.key) || '700c467755db139a0780ef3c86276a83';
+        await window.AmapNavi.init(apiKey);
+        console.log('[AmapNavi] App启动时初始化成功');
+      } catch(e) {
+        console.warn('[AmapNavi] 初始化失败（可能是浏览器环境）:', e);
+      }
+    }
+  })();
   
   // 尝试从URL hash获取初始页面
   var initial = _getInitialPage();

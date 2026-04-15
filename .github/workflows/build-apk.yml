@@ -50,6 +50,7 @@ jobs:
         run: |
           npm install
           npm install @capacitor/android
+          npm install @capacitor/geolocation
 
       - name: Add Android platform
         run: npx cap add android

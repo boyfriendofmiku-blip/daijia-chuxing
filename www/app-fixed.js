@@ -1271,10 +1271,15 @@ function _speak(text, force) {
   utterance.rate = 1.0;
   utterance.pitch = 1.0;
   utterance.volume = 1.0;
+  // 尝试找中文语音（getVoices可能异步加载，尝试两次）
   var voices = window.speechSynthesis.getVoices();
-  var zhVoice = voices.find(function(v) { return v.lang && v.lang.indexOf('zh') >= 0; });
+  var zhVoice = null;
+  if (voices && voices.length > 0) {
+    zhVoice = voices.find(function(v) { return v.lang && v.lang.indexOf('zh') >= 0; });
+  }
   if (zhVoice) utterance.voice = zhVoice;
-  window.speechSynthesis.speak(utterance);
+  // 即使没找到中文语音也尝试播放（系统会用默认语音）
+  try { window.speechSynthesis.speak(utterance); } catch(e) {}
   console.log('[NavMap] 语音播报:', text);
 }
 
@@ -1554,27 +1559,40 @@ function _initNavGeolocation(orderId) {
     cachedLng = parseFloat(pos.lng) || 0;
   } catch(e) {}
   
-  if (!window.navigator.geolocation) {
-    console.warn('[NavMap] 浏览器不支持定位');
-    // 使用缓存位置或订单出发地
-    _usePositionForRoute(cachedLat, cachedLng, orderId);
+  // 优先：使用 Capacitor 原生 Geolocation（APP 内真实 GPS）
+  var capGeo = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
+  if (capGeo) {
+    console.log('[NavMap] 使用 Capacitor 原生定位...');
+    capGeo.getCurrentPosition({ enableHighAccuracy: true }).then(function(pos) {
+      console.log('[NavMap] Capacitor定位成功:', pos.coords.latitude, pos.coords.longitude);
+      _onNavLocationSuccess(pos.coords.latitude, pos.coords.longitude, pos.coords.heading || 0, orderId);
+      // Capacitor无watchPosition，用setInterval模拟（5秒更新一次）
+      if (_navMapState && _navMapState._capWatchId) clearInterval(_navMapState._capWatchId);
+      _navMapState._capWatchId = setInterval(function() {
+        if (!_navMapState || _navMapState.orderId !== orderId) return;
+        capGeo.getCurrentPosition({ enableHighAccuracy: true }).then(function(p) {
+          _onNavLocationSuccess(p.coords.latitude, p.coords.longitude, p.coords.heading || _navMapState.heading, orderId);
+        }).catch(function() {});
+      }, 5000);
+    }).catch(function(err) {
+      console.warn('[NavMap] Capacitor定位失败，尝试浏览器定位:', err);
+      _fallbackBrowserGeo(orderId, cachedLat, cachedLng);
+    });
     return;
   }
 
-  // 尝试使用高德定位
-  if (typeof AMap !== 'undefined') {
+  // 后备：浏览器定位
+  _fallbackBrowserGeo(orderId, cachedLat, cachedLng);
+}
+
+function _fallbackBrowserGeo(orderId, cachedLat, cachedLng) {
+  if (typeof AMap !== 'undefined' && AMap.Geolocation) {
     console.log('[NavMap] 使用高德定位...');
-    var geolocation = new AMap.Geolocation({
-      enableHighAccuracy: true,
-      timeout: 10000,
-      convert: true
-    });
-    
+    var geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000, convert: true });
     geolocation.getCurrentPosition(function(status, result) {
-      console.log('[NavMap] 高德定位结果:', status, result);
       if (status === 'complete' && result.position) {
         _onNavLocationSuccess(result.position.lat, result.position.lng, result.heading || 0, orderId);
-        // 开始持续定位
+        // 高德支持持续定位
         geolocation.watchPosition(function(res) {
           if (res.position) {
             _onNavLocationSuccess(res.position.lat, res.position.lng, res.heading || _navMapState.heading, orderId);
@@ -1585,28 +1603,24 @@ function _initNavGeolocation(orderId) {
         _usePositionForRoute(cachedLat, cachedLng, orderId);
       }
     });
-    
-    // 添加定位超时后备
     setTimeout(function() {
       if (!_navMapState || !_navMapState._firstLocationDone) {
-        console.warn('[NavMap] 定位超时，使用后备位置');
         _usePositionForRoute(cachedLat, cachedLng, orderId);
       }
     }, 12000);
-  } else {
+  } else if (window.navigator.geolocation) {
     console.log('[NavMap] 使用浏览器原生定位...');
-    // 使用浏览器原生定位
     window.navigator.geolocation.getCurrentPosition(
       function(pos) {
-        console.log('[NavMap] 浏览器定位成功:', pos.coords.latitude, pos.coords.longitude);
         _onNavLocationSuccess(pos.coords.latitude, pos.coords.longitude, pos.coords.heading || 0, orderId);
       },
       function(err) {
-        console.warn('[NavMap] 浏览器定位失败:', err);
         _usePositionForRoute(cachedLat, cachedLng, orderId);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+  } else {
+    _usePositionForRoute(cachedLat, cachedLng, orderId);
   }
 }
 
@@ -1927,6 +1941,7 @@ function _updateNavInstruction(steps, currentLat, currentLng) {
 function cleanupNavMap() {
   if (_navMapState) {
     if (_navMapState._watchId) clearInterval(_navMapState._watchId);
+    if (_navMapState._capWatchId) clearInterval(_navMapState._capWatchId);
     // 取消订单状态订阅
     if (_navMapState._orderSub && typeof _navMapState._orderSub.unsubscribe === 'function') {
       try { _navMapState._orderSub.unsubscribe(); } catch(e) {}

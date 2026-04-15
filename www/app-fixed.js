@@ -1395,6 +1395,7 @@ function _doInitNavMap(orderId, container) {
     }
     
     // 存储地图实例
+    var isRiding = (currentPhase === NAV_PHASE_RIDING);
     _navMapState = {
       map: map,
       orderId: orderId,

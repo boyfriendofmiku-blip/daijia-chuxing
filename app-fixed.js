@@ -1519,28 +1519,25 @@ function _switchNavPhase(newPhase) {
     // 更新UI
     _updateNavPhaseUI(NAV_PHASE_DRIVING, _navMapState.finalName);
 
-    // 更新外部导航链接（指向阶段2目的地）
-    var amapBtn = document.getElementById('nav-amap-btn');
-    var appleBtn = document.getElementById('nav-apple-btn');
-    if (amapBtn) {
-      amapBtn.href = 'amap://navi?sourceApplication=代驾出行&lat=' + _navMapState.finalLat + '&lng=' + _navMapState.finalLng + '&name=' + encodeURIComponent(_navMapState.finalName) + '&dev=1';
-    }
-    if (appleBtn) {
-      appleBtn.href = 'http://maps.apple.com/?daddr=' + _navMapState.finalLat + ',' + _navMapState.finalLng + '&dirflg=d';
-    }
-
-    // 清除旧路线，重新规划
+    // 清除旧路线，重新规划（用当前GPS位置）
     _navMapState._routeAnnounced = false;
     if (_navMapState.routeLine) {
       _navMapState.routeLine.setMap(null);
       _navMapState.routeLine = null;
     }
-    try {
-      var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
-      var lat = parseFloat(pos.lat) || 0;
-      var lng = parseFloat(pos.lng) || 0;
-      if (lat && lng) _drawNavRoute(lat, lng);
-    } catch(e) {}
+    var curLat = _navMapState.myLat;
+    var curLng = _navMapState.myLng;
+    if (curLat && curLng) {
+      _drawNavRoute(curLat, curLng);
+    } else {
+      // 无GPS时用缓存
+      try {
+        var pos = JSON.parse(localStorage.getItem('dj_driver_pos') || '{}');
+        var lat = parseFloat(pos.lat) || 0;
+        var lng = parseFloat(pos.lng) || 0;
+        if (lat && lng) _drawNavRoute(lat, lng);
+      } catch(e) {}
+    }
 
     _speak('乘客已上车，开始代驾，目的地' + _navMapState.finalName, true);
   }

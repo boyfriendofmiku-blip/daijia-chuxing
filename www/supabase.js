@@ -166,31 +166,53 @@ const DB = {
 
   // ============ 用户操作 ============
   async findUser(phone, password, role) {
-    const { data, error } = await sb()
-      .from('users')
-      .select('*')
-      .eq('phone', phone)
-      .eq('password', password)
-      .eq('role', role)
-      .limit(1);
-    if (error || !data || data.length === 0) return null;
-    const u = data[0];
-    return {
-      id: String(u.id),
-      phone: u.phone,
-      password: u.password,
-      name: u.name,
-      role: u.role,
-      avatar: u.avatar,
-      car_plate: u.car_plate,
-      car_model: u.car_model,
-      rating: u.rating ? String(u.rating) : '4.9',
-      total_orders: u.total_orders || 0,
-      online: u.online || false,
-      createdAt: u.created_at ? new Date(u.created_at).toLocaleString('zh-CN', { hour12: false }) : '',
-      license: u.car_plate || '',
-      _sb_id: u.id
-    };
+    try {
+      const { data, error } = await sb()
+        .from('users')
+        .select('*')
+        .eq('phone', phone)
+        .eq('password', password)
+        .eq('role', role)
+        .limit(1);
+      if (error) {
+        // 网络错误或数据库错误
+        console.error('findUser error:', error);
+        return { error: 'network', message: '网络连接失败，请检查网络' };
+      }
+      if (!data || data.length === 0) {
+        // 先检查手机号是否存在
+        const { data: userData } = await sb()
+          .from('users')
+          .select('phone')
+          .eq('phone', phone)
+          .eq('role', role)
+          .limit(1);
+        if (!userData || userData.length === 0) {
+          return { error: 'not_found', message: '该账号不存在' };
+        }
+        return { error: 'wrong_password', message: '密码错误' };
+      }
+      const u = data[0];
+      return {
+        id: String(u.id),
+        phone: u.phone,
+        password: u.password,
+        name: u.name,
+        role: u.role,
+        avatar: u.avatar,
+        car_plate: u.car_plate,
+        car_model: u.car_model,
+        rating: u.rating ? String(u.rating) : '4.9',
+        total_orders: u.total_orders || 0,
+        online: u.online || false,
+        createdAt: u.created_at ? new Date(u.created_at).toLocaleString('zh-CN', { hour12: false }) : '',
+        license: u.car_plate || '',
+        _sb_id: u.id
+      };
+    } catch(e) {
+      console.error('findUser exception:', e);
+      return { error: 'network', message: '网络连接失败，请检查网络' };
+    }
   },
 
   async findUserByPhone(phone, role) {
@@ -215,33 +237,42 @@ const DB = {
   },
 
   async registerUser(user) {
-    const { data, error } = await sb()
-      .from('users')
-      .insert({
-        phone: user.phone,
-        password: user.pwd || user.password,
-        role: user.role || 'passenger',
-        name: user.name,
-        car_plate: user.license || null,
-        rating: user.rating || 5.0,
-        online: false
-      })
-      .select()
-      .single();
-    if (error) {
-      if (error.code === '23505') return { error: '该手机号已注册' };
-      console.error('registerUser error:', error);
-      return { error: '注册失败：' + (error.message || '未知错误') };
+    try {
+      const { data, error } = await sb()
+        .from('users')
+        .insert({
+          phone: user.phone,
+          password: user.pwd || user.password,
+          role: user.role || 'passenger',
+          name: user.name,
+          car_plate: user.license || null,
+          rating: user.rating || 5.0,
+          online: false
+        })
+        .select()
+        .single();
+      if (error) {
+        if (error.code === '23505') return { error: '该手机号已注册' };
+        // 检查是否是网络错误
+        if (error.message && error.message.toLowerCase().includes('fetch')) {
+          return { error: '网络连接失败，请检查网络后重试' };
+        }
+        console.error('registerUser error:', error);
+        return { error: '注册失败：' + (error.message || '未知错误') };
+      }
+      return {
+        id: String(data.id),
+        phone: data.phone,
+        name: data.name,
+        role: data.role,
+        createdAt: data.created_at ? new Date(data.created_at).toLocaleString('zh-CN', { hour12: false }) : '',
+        license: data.car_plate || '',
+        _sb_id: data.id
+      };
+    } catch(e) {
+      console.error('registerUser exception:', e);
+      return { error: '网络连接失败，请检查网络后重试' };
     }
-    return {
-      id: String(data.id),
-      phone: data.phone,
-      name: data.name,
-      role: data.role,
-      createdAt: data.created_at ? new Date(data.created_at).toLocaleString('zh-CN', { hour12: false }) : '',
-      license: data.car_plate || '',
-      _sb_id: data.id
-    };
   },
 
   // ============ 订单操作 ============
@@ -581,11 +612,15 @@ const DB = {
         if (error.code === '23505' || error.message.includes('assigned_to')) {
           return { taken: true };
         }
+        // 网络错误
+        if (error.message && error.message.toLowerCase().includes('fetch')) {
+          return { error: 'network', message: '网络连接失败，请检查网络' };
+        }
         return { error: error.message };
       }
       return { success: true, order: data };
     } catch(e) {
-      return { error: e.message };
+      return { error: 'network', message: '网络连接失败，请检查网络' };
     }
   },
 

@@ -4,7 +4,7 @@
 ================================================ */
 
 // 当前版本号（每次发布请更新）
-window.APP_VERSION = 'v2.2-20260401-b';
+window.APP_VERSION = 'v2.3-20260414';
 
 // 高德地图兼容层：让旧代码（TMap）兼容高德 API
 window.addEventListener('amap-ready', function() {
@@ -567,9 +567,10 @@ function loadingHtml() {
 var _isNavigating = false;
 
 function navigate(page, params, skipHistory) {
-  // 切页时清理实时追踪和到达检测
+  // 切页时清理实时追踪、到达检测、导航地图
   stopLiveTracking();
   stopArrivalCheck();
+  cleanupNavMap();
 
   // 记录页面历史（用于返回）
   if (!skipHistory && State.currentPage !== page) {
@@ -714,7 +715,12 @@ async function render() {
       case 'driver-main':    app.innerHTML = await renderDriverMain(); break;
       case 'create-order':   app.innerHTML = renderCreateOrder(); break;
       case 'order-detail':   app.innerHTML = await renderOrderDetail(State.pageParams.orderId); break;
-      case 'nav-map':        app.innerHTML = await renderNavMapPage(State.pageParams.orderId); initNavMap(State.pageParams.orderId); break;
+      case 'nav-map':
+        cleanupNavMap();
+        app.innerHTML = await renderNavMapPage(State.pageParams.orderId);
+        // 延迟初始化确保DOM渲染完毕（bindEvents 由 render 末尾统一调用）
+        setTimeout(function() { initNavMap(State.pageParams.orderId); }, 100);
+        break;
       case 'order-hall':     
         cleanupHallMap(); 
         app.innerHTML = await renderOrderHall(); 
@@ -1207,18 +1213,23 @@ var _navTimerId = null; // 缓存定时 ID
 var NAV_PHASE_RIDING = 'riding';   // 骑行去接客
 var NAV_PHASE_DRIVING = 'driving'; // 驾车送客
 
-function initNavMap(orderId) {
+function initNavMap(orderId, _retries) {
   console.log('[NavMap] initNavMap 被调用, orderId:', orderId);
-  
+  _retries = _retries || 0;
+
   if (typeof AMap === 'undefined') {
     showToast('地图加载中，请稍候...', '');
-    setTimeout(function() { initNavMap(orderId); }, 2000);
+    setTimeout(function() { initNavMap(orderId, _retries); }, 2000);
     return;
   }
 
   var container = document.getElementById('nav-amap-container');
   if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
-    setTimeout(function() { initNavMap(orderId); }, 500);
+    if (_retries < 20) {
+      setTimeout(function() { initNavMap(orderId, _retries + 1); }, 300);
+    } else {
+      console.error('[NavMap] 容器仍未就绪，放弃初始化');
+    }
     return;
   }
 
@@ -1642,6 +1653,15 @@ function _onNavLocationSuccess(lat, lng, heading, orderId) {
     _navMapState.map.setZoom(16);
     // 首次定位后规划路线
     _drawNavRoute(lat, lng);
+  } else {
+    // 阶段1且司机偏离中心超过500米时自动跟随（骑行接客时）
+    if (_navMapState.phase === NAV_PHASE_RIDING) {
+      var center = _navMapState.map.getCenter();
+      var distToCenter = _calcDistance(lat, lng, center.getLat(), center.getLng());
+      if (distToCenter > 500) {
+        _navMapState.map.setCenter([lng, lat]);
+      }
+    }
   }
 }
 
@@ -2057,17 +2077,36 @@ async function renderDriverMain() {
   }
 
   let activeOrdersHtml = '';
-  if (myOrders.filter(function(o) { return o.status === 'accepted' || o.status === 'ongoing'; }).length > 0) {
+  const activeOrders = myOrders.filter(function(o) { return o.status === 'accepted' || o.status === 'ongoing'; });
+  if (activeOrders.length > 0) {
     activeOrdersHtml = '<div class="section-title">🚗 进行中的订单</div>';
-    myOrders.filter(function(o) { return ['accepted','ongoing'].includes(o.status); }).forEach(function(o) {
-      activeOrdersHtml += '<div class="order-card" data-action="order-detail" data-order-id="' + o.id + '" style="margin:0 20px 12px">' +
-        '<div class="order-header"><span class="order-id">订单 #' + o.id.slice(-6).toUpperCase() + '</span>' + statusBadge(o.status) + '</div>' +
-        '<div class="order-route">' +
-          '<div class="route-item"><span class="route-dot start"></span><span>' + o.from + '</span></div>' +
-          '<div class="route-item" style="padding-left:2px"><span class="route-connector"></span></div>' +
-          '<div class="route-item"><span class="route-dot end"></span><span>' + o.to + '</span></div>' +
+    activeOrders.forEach(function(o) {
+      var isAccepted = o.status === 'accepted';
+      var orderStatusText = isAccepted ? '🛵 前往接客' : '🚗 代驾中';
+      var navPhaseHint = isAccepted ? '导航前往乘客位置' : '导航前往目的地';
+      var cardGradient = isAccepted
+        ? 'linear-gradient(135deg,rgba(76,175,80,0.15),rgba(76,175,80,0.05))'
+        : 'linear-gradient(135deg,rgba(55,119,255,0.15),rgba(98,89,255,0.05))';
+      var navBtnGradient = isAccepted
+        ? 'linear-gradient(135deg,#43a047,#66bb6a)'
+        : 'linear-gradient(135deg,#3777FF,#6259FF)';
+      activeOrdersHtml += '<div style="margin:0 16px 12px;border-radius:16px;background:' + cardGradient + ';border:1px solid ' + (isAccepted ? 'rgba(76,175,80,0.3)' : 'rgba(55,119,255,0.3)') + ';overflow:hidden">' +
+        // 顶部状态栏
+        '<div style="padding:10px 14px 6px;display:flex;align-items:center;justify-content:space-between">' +
+          '<span style="font-size:13px;font-weight:700;color:' + (isAccepted ? '#4CAF50' : '#3777FF') + '">' + orderStatusText + '</span>' +
+          '<span class="order-id" style="font-size:11px">订单 #' + o.id.slice(-6).toUpperCase() + '</span>' +
         '</div>' +
-        '<div class="order-footer"><span class="order-price">' + formatPrice(o.price) + '</span><span class="order-time">' + o.createdAt + '</span></div>' +
+        // 路线信息
+        '<div style="padding:0 14px 8px">' +
+          '<div style="font-size:13px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📍 ' + o.from + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);padding-left:14px;margin:2px 0">↓</div>' +
+          '<div style="font-size:13px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🏁 ' + o.to + '</div>' +
+        '</div>' +
+        // 大导航按钮
+        '<div style="padding:0 14px 14px;display:flex;gap:8px">' +
+          '<button class="btn btn-sm" data-action="open-navigation-in-app" data-order-id="' + o.id + '" style="flex:2;background:' + navBtnGradient + ';border:none;color:#fff;font-size:14px;font-weight:700;padding:12px 0;border-radius:12px;box-shadow:0 4px 12px rgba(55,119,255,0.4)">🧭 ' + navPhaseHint + '</button>' +
+          '<button class="btn btn-outline btn-sm" data-action="order-detail" data-order-id="' + o.id + '" style="flex:1;font-size:12px;padding:12px 0;border-radius:12px">📋 详情</button>' +
+        '</div>' +
       '</div>';
     });
   }
@@ -2418,7 +2457,13 @@ async function renderOrderHall() {
         distText = o.distance >= 1000 ? (o.distance / 1000).toFixed(1) + ' km' : o.distance + ' m';
       }
       const distHtml = distText ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📏 ' + distText + '</div>' : '';
-      ordersHtml += '<div class="hall-order-card">' +
+      // 新订单脉冲标记（30秒内创建）
+      var isNewOrder = false;
+      if (o.created_at) {
+        var orderTime = new Date(o.created_at).getTime();
+        if (!isNaN(orderTime) && (Date.now() - orderTime) < 30000) isNewOrder = true;
+      }
+      ordersHtml += '<div class="hall-order-card' + (isNewOrder ? ' new-order' : '') + '">' +
         '<div class="hall-header"><div><div class="order-user">👤 ' + pName + '</div>' +
           (pPhone ? '<div class="order-meta">📞 ' + pPhone + '</div>' : '') +
           '<div class="order-meta">' + o.createdAt + '</div></div>' +
@@ -2464,7 +2509,7 @@ async function renderOrderHall() {
 // ============================================================
 function renderDriverCreateOrder() {
   return '<div class="page">' +
-    '<div class="page-header"><button class="back-btn" data-action="order-hall">←</button><h2>主动创单</h2></div>' +
+    '<div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>主动创单</h2></div>' +
     '<div class="page-content">' +
       '<div class="map-container" id="drv-map-container">' +
         '<div id="drv-order-map" class="map-canvas"></div>' +
@@ -2549,7 +2594,7 @@ async function renderProfile() {
   const unreadCount = getUnreadCount(u.id);
 
   return '<div class="page">' +
-    '<div class="page-header"><button class="back-btn" data-action="' + (isDriver ? 'driver-main' : 'user-main') + '">←</button><h2>个人中心</h2><div class="topbar-icon-wrap" data-action="notifications" style="position:relative;top:0">🔔' + (unreadCount > 0 ? '<span class="unread-badge">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') + '</div></div>' +
+    '<div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>个人中心</h2><div class="topbar-icon-wrap" data-action="notifications" style="position:relative;top:0">🔔' + (unreadCount > 0 ? '<span class="unread-badge">' + (unreadCount > 99 ? '99+' : unreadCount) + '</span>' : '') + '</div></div>' +
     '<div class="page-content">' +
       '<div style="text-align:center;padding:24px 0">' +
         '<div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#FF8C42);display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 12px">' + (isDriver ? '🧑‍✈️' : '👤') + '</div>' +
@@ -2593,7 +2638,7 @@ async function renderStats() {
   const pending = myOrders.filter(function(o) { return o.status === 'pending'; });
   const totalMoney = completed.reduce(function(s, o) { return s + Number(o.price); }, 0);
 
-  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="' + (isDriver ? 'driver-main' : 'user-main') + '">←</button><h2>统计报表</h2></div>' +
+  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>统计报表</h2></div>' +
     '<div class="page-content">' +
       '<div class="card"><div class="card-header">' + (isDriver ? '📊 接单统计' : '📊 出行统计') + '</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
@@ -2639,7 +2684,7 @@ function renderNotifications() {
     });
   }
 
-  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="' + (isDriver ? 'driver-main' : 'user-main') + '">←</button><h2>消息通知</h2></div>' +
+  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>消息通知</h2></div>' +
     '<div class="page-content">' + html + '</div></div>';
 }
 
@@ -2648,7 +2693,7 @@ function renderNotifications() {
 // ============================================================
 function renderFeedback() {
   var u = State.currentUser;
-  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="profile">←</button><h2>意见反馈</h2></div>' +
+  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>意见反馈</h2></div>' +
     '<div class="page-content"><div class="card"><div class="card-header">📝 您的反馈对我们很重要</div>' +
       '<div style="margin-bottom:16px"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">反馈类型</label>' +
         '<div class="feedback-types" id="feedback-types">' +
@@ -2670,7 +2715,7 @@ function renderFeedback() {
 //  关于页面
 // ============================================================
 function renderAbout() {
-  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="profile">←</button><h2>关于</h2></div>' +
+  return '<div class="page"><div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>关于</h2></div>' +
     '<div class="page-content">' +
       '<div style="text-align:center;padding:32px 0 24px"><div style="font-size:56px;margin-bottom:12px">🚗</div><div style="font-size:22px;font-weight:700">代驾出行</div><div style="font-size:13px;color:var(--text-muted);margin-top:6px">安全 · 快捷 · 专业</div><div style="font-size:12px;color:var(--text-muted);margin-top:12px;padding:4px 12px;background:var(--bg);border-radius:12px;display:inline-block">' + (window.APP_VERSION || 'v2.0.0') + ' · 云端同步</div></div>' +
       '<div class="card"><div class="card-header">🔄 检查更新</div>' +
@@ -2719,7 +2764,7 @@ function renderManageAddresses() {
   }
 
   return '<div class="page">' +
-    '<div class="page-header"><button class="back-btn" data-action="profile">←</button><h2>常用地址</h2></div>' +
+    '<div class="page-header"><button class="back-btn" data-action="go-back">←</button><h2>常用地址</h2></div>' +
     '<div class="page-content">' +
       '<div class="card" style="margin-bottom:16px"><div class="card-header">➕ 添加新地址</div>' +
         '<div class="form-group"><label>地址类型</label>' +
@@ -2745,7 +2790,28 @@ function renderManageAddresses() {
 // ============================================================
 //  事件绑定
 // ============================================================
+// ============================================================
+//  按钮涟漪效果
+// ============================================================
+function _addRipple(el) {
+  el.style.position = 'relative'; el.style.overflow = 'hidden';
+  el.addEventListener('click', function(e) {
+    var ripple = document.createElement('span');
+    ripple.className = 'ripple';
+    var rect = el.getBoundingClientRect();
+    var size = Math.max(rect.width, rect.height);
+    ripple.style.width = ripple.style.height = size + 'px';
+    ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+    ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+    el.appendChild(ripple);
+    setTimeout(function() { ripple.remove(); }, 600);
+  });
+}
+
 function bindEvents() {
+  // 为所有 .btn 按钮添加涟漪效果
+  document.querySelectorAll('.btn').forEach(function(btn) { _addRipple(btn); });
+
   // 通用 data-action 路由
   document.querySelectorAll('[data-action]').forEach(function(el) {
     el.addEventListener('click', function(e) {
@@ -2780,8 +2846,14 @@ function bindEvents() {
       e.preventDefault();
       var phone = document.getElementById('login-phone').value.trim();
       var pwd = document.getElementById('login-pwd').value;
-      var user = await DB.findUser(phone, pwd, 'passenger');
-      if (!user) { showToast('手机号或密码错误', 'error'); return; }
+      if (!phone) { showToast('请输入手机号', 'error'); return; }
+      if (!pwd) { showToast('请输入密码', 'error'); return; }
+      var result = await DB.findUser(phone, pwd, 'passenger');
+      if (result.error) {
+        showToast(result.message, 'error');
+        return;
+      }
+      var user = result;
       State.currentUser = { id: user.id, name: user.name, phone: user.phone, type: 'user', createdAt: user.createdAt };
       showToast('登录成功，欢迎回来 ' + user.name, 'success');
       requestNotificationPermission(); // 请求浏览器通知权限
@@ -2819,12 +2891,32 @@ function bindEvents() {
       e.preventDefault();
       var phone = document.getElementById('dlogin-phone').value.trim();
       var pwd = document.getElementById('dlogin-pwd').value;
-      var driver = await DB.findUser(phone, pwd, 'driver');
-      if (!driver) { showToast('手机号或密码错误', 'error'); return; }
+      if (!phone) { showToast('请输入手机号', 'error'); return; }
+      if (!pwd) { showToast('请输入密码', 'error'); return; }
+      var result = await DB.findUser(phone, pwd, 'driver');
+      if (result.error) {
+        showToast(result.message, 'error');
+        return;
+      }
+      var driver = result;
       State.currentUser = { id: driver.id, name: driver.name, phone: driver.phone, license: driver.license || driver.car_plate, type: 'driver', rating: driver.rating, createdAt: driver.createdAt };
       showToast('登录成功，欢迎 ' + driver.name, 'success');
       requestNotificationPermission(); // 请求浏览器通知权限
-      navigate('driver-main');
+      // 检查是否有进行中的订单，有则直接进入导航
+      try {
+        var allOrders = await DB.getOrders();
+        var activeOrder = allOrders.find(function(o) {
+          return o.driverId === driver.id && (o.status === 'accepted' || o.status === 'ongoing');
+        });
+        if (activeOrder) {
+          showToast('检测到进行中的订单，即将进入导航 🧭', 'info');
+          navigate('nav-map', { orderId: activeOrder.id });
+        } else {
+          navigate('driver-main');
+        }
+      } catch(e) {
+        navigate('driver-main');
+      }
     });
   }
 
@@ -3352,13 +3444,17 @@ async function handleAction(action, dataset) {
       if (dResult && dResult.success) {
         if (dOrder.userId) addNotification(dOrder.userId, '司机已接单', '您的代驾订单已被司机接单，请等待司机到达。', 'order');
         addNotification(State.currentUser.id, '接单成功', '您已成功接单，请尽快前往出发地。', 'order');
-        showToast('接单成功！请前往出发地 🚗', 'success');
+        showToast('接单成功！即将开始导航 🧭', 'success');
         // 清理派单 localStorage
         localStorage.removeItem('dj_dispatch_for_' + State.currentUser.id);
         localStorage.removeItem('dj_dispatch_' + dOrderId);
-        navigate('order-detail', { orderId: dOrderId });
+        navigate('nav-map', { orderId: dOrderId });
+      } else if (dResult && dResult.taken) {
+        showToast('订单已被其他司机接走', 'warning');
+        render();
       } else {
-        showToast('接单失败，请重试', 'error');
+        var errMsg = (dResult && dResult.message) || '接单失败，请重试';
+        showToast(errMsg, 'error');
         render();
       }
       break;
@@ -3393,8 +3489,8 @@ async function handleAction(action, dataset) {
       if (result) {
         if (order.userId) addNotification(order.userId, '司机已接单', '您的代驾订单已被司机接单，请等待司机到达。', 'order');
         addNotification(State.currentUser.id, '接单成功', '您已成功接单，请尽快前往出发地。', 'order');
-        showToast('接单成功！请前往出发地 🚗', 'success');
-        navigate('order-detail', { orderId: orderId });
+        showToast('接单成功！即将开始导航 🧭', 'success');
+        navigate('nav-map', { orderId: orderId });
       } else {
         showToast('接单失败，请重试', 'error');
         render();
@@ -3409,8 +3505,8 @@ async function handleAction(action, dataset) {
       var result2 = await DB.updateOrder(orderId2, { status: 'ongoing' });
       var order2 = await DB.getOrderById(orderId2);
       if (order2 && order2.userId) addNotification(order2.userId, '代驾已开始', '您的代驾行程已开始，祝您一路顺风！', 'order');
-      showToast('代驾已开始，行程进行中 🚗', 'success');
-      navigate('order-detail', { orderId: orderId2 });
+      showToast('代驾已开始，正在为您导航 🚗', 'success');
+      navigate('nav-map', { orderId: orderId2 });
       break;
     }
 

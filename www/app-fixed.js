@@ -2826,17 +2826,32 @@ function bindEvents() {
   // 为所有 .btn 按钮添加涟漪效果
   document.querySelectorAll('.btn').forEach(function(btn) { _addRipple(btn); });
 
-  // 通用 data-action 路由
-  document.querySelectorAll('[data-action]').forEach(function(el) {
-    el.addEventListener('click', function(e) {
-      e.stopPropagation();
-      var action = el.dataset.action;
-      var dataset = el.dataset;
-      console.log('[DEBUG] data-action clicked:', action, dataset);
-      handleAction(action, dataset);
-    });
-  });
+  // 通用 data-action 路由 — 使用事件委托到 app 容器，
+  // 避免 render() 为 async 时 bindEvents() 在 await 期间被跳过导致按钮无响应
+  var app = document.getElementById('app');
+  if (app) {
+    // 先移除旧委托（防重复绑定）
+    app.removeEventListener('click', _actionDelegate);
+  }
+  app.addEventListener('click', _actionDelegate);
 
+  // 其余事件绑定（表单、tab切换等）
+  _bindRestEvents();
+}
+
+function _actionDelegate(e) {
+  var el = e.target.closest('[data-action]');
+  if (!el) return;
+  e.stopPropagation();
+  var action = el.dataset.action;
+  var dataset = el.dataset;
+  console.log('[DEBUG] data-action clicked:', action, dataset);
+  handleAction(action, dataset);
+}
+
+function _bindRestEvents() {
+  // 此函数内容为原 bindEvents() 中除 data-action 委托外的其余部分
+  // 由 render() 末尾的 bindEvents() 统一调用
   // Tab 切换（支持 login / register）
   document.querySelectorAll('[data-tab]').forEach(function(el) {
     el.addEventListener('click', function(e) {

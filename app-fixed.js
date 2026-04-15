@@ -2924,8 +2924,12 @@ function bindEvents() {
         });
         if (activeOrder) {
           showToast('检测到进行中的订单，即将进入导航 🧭', 'info');
-          // skipHistory=true：登录 → 导航，按返回键直接回首页，不回登录页
-          navigate('nav-map', { orderId: activeOrder.id }, true);
+          // 不 skipHistory：history = home → driver-login → driver-main → nav-map
+          // 按返回 = nav-map → driver-main → driver-login → home
+          navigate('driver-main');
+          setTimeout(function() {
+            navigate('nav-map', { orderId: activeOrder.id });
+          }, 100);
         } else {
           navigate('driver-main');
         }

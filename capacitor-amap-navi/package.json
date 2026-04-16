@@ -26,5 +26,13 @@
     "typescript": "^5.0.0"
   },
   "author": "daijia",
-  "license": "MIT"
+  "license": "MIT",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
 }

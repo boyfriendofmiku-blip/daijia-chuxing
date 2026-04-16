@@ -13,7 +13,10 @@
     ]
   },
   "android": {
-    "allowMixedContent": true
+    "allowMixedContent": true,
+    "includePlugins": [
+      "@capacitor/amap-navi"
+    ]
   },
   "plugins": {
     "SplashScreen": {

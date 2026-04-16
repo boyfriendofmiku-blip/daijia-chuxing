@@ -60,9 +60,8 @@ jobs:
           cp -r capacitor-amap-navi node_modules/@capacitor/amap-navi
           echo "=== 验证插件已安装 ==="
           ls -la node_modules/@capacitor/amap-navi/
-          ls -la node_modules/@capacitor/amap-navi/android/
-          echo "=== 检查插件 package.json ==="
-          cat node_modules/@capacitor/amap-navi/package.json
+          echo "=== 插件 package.json ==="
+          cat node_modules/@capacitor/amap-navi/package.json | head -40
 
       - name: Initialize Capacitor
         run: npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
@@ -75,14 +74,29 @@ jobs:
       - name: Sync plugins and web assets
         run: |
           npx cap sync android
-          echo "=== 检查 sync 后的 android 项目 ==="
-          echo "=== app/build.gradle dependencies ==="
-          cat android/app/build.gradle | grep -A20 "dependencies"
-          echo "=== settings.gradle ==="
+          echo "=== 列出已检测到的插件 ==="
+          npx cap ls
+
+      - name: Manually add amap-navi plugin to settings.gradle
+        run: |
+          echo "=== 检查当前 settings.gradle ==="
           cat android/settings.gradle
-          echo "=== 检查插件是否被包含 ==="
-          grep -r "amap" android/app/build.gradle || echo "未找到 amap 相关配置"
-          grep -r "capacitor-amap-navi" android/settings.gradle || echo "未在 settings.gradle 中找到插件"
+          echo ""
+          echo "=== 手动添加 amap-navi 插件 ==="
+          # 在 capacitor.settings.gradle 之前添加 amap-navi
+          sed -i "/apply from: 'capacitor.settings.gradle'/i\\
+include ':capacitor-amap-navi'\\
+project(':capacitor-amap-navi').projectDir = new File('../node_modules/@capacitor/amap-navi/android')
+" android/settings.gradle
+          echo "=== 更新后的 settings.gradle ==="
+          cat android/settings.gradle
+
+      - name: Add amap-navi to app/build.gradle
+        run: |
+          echo "=== 添加 amap-navi 到 app/build.gradle dependencies ==="
+          sed -i "/implementation project(':capacitor-cordova-android-plugins')/a\\    implementation project(':capacitor-amap-navi')" android/app/build.gradle
+          echo "=== 更新后的 dependencies ==="
+          grep -A15 "dependencies" android/app/build.gradle
 
       - name: Ensure Maven repos in build.gradle
         run: |
@@ -135,9 +149,9 @@ jobs:
           echo "=== 检查 APK 大小 ==="
           ls -lh android/app/build/outputs/apk/release/app-release.apk
           echo "=== 检查 APK 中的 .so 文件 ==="
-          unzip -l android/app/build/outputs/apk/release/app-release.apk | grep -E "\.so$|amap|navi" || echo "检查 APK 内容..."
-          echo "=== 检查 APK 中是否有高德 SDK ==="
-          unzip -l android/app/build/outputs/apk/release/app-release.apk | wc -l
+          unzip -l android/app/build/outputs/apk/release/app-release.apk | grep -E "\.so$|amap|navi" || echo "未在 APK 中找到高德相关文件"
+          echo "=== APK 总体大小 ==="
+          du -h android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2

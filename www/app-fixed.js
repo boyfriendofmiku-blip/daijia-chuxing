@@ -4078,25 +4078,26 @@ window._tryNaviApp = async function(appId) {
   };
 
   if (appId === 'amap') {
-    // 优先用 Capacitor 原生插件
-    if (window.AmapNavi) {
+    // 优先用嵌入式全屏导航（App内直接显示高德导航界面）
+    if (window.AmapNavi && window.AmapNavi.startEmbeddedNavi) {
       try {
         var waypoints = [
           { latitude: myLat, longitude: myLng, name: '我的位置' },
           { latitude: targetLat, longitude: targetLng, name: targetName }
         ];
         var mode = s.isRiding ? 2 : 0;
+        // 初始化（如果还没初始化过）
         if (!window.AmapNavi._initialized) {
           var apiKey = (window._AMapConfig && window._AMapConfig.key) || '700c467755db139a0780ef3c86276a83';
-          await window.AmapNavi.init(apiKey);
+          await window.AmapNavi.initialize({ apiKey: apiKey });
+          window.AmapNavi._initialized = true;
         }
-        var r = await window.AmapNavi.startNavigation({ waypoints: waypoints, mode: mode });
-        if (r && r.success) { showToast('已调起高德导航 🧭', 'success'); return; }
-      } catch(e) { console.warn('[AmapNavi] 插件调用失败:', e); }
+        var r = await window.AmapNavi.startEmbeddedNavi({ waypoints: waypoints, mode: mode });
+        if (r && r.success) { showToast('正在启动高德导航...', 'success'); return; }
+      } catch(e) { console.warn('[AmapNavi] 嵌入式导航调用失败，尝试兜底:', e); }
     }
-    // URL scheme 调起
+    // 兜底：URL scheme 调起高德 App
     _openUrl(urls.amap);
-    // 1.5秒后检测是否真的调起（通过页面可见性变化判断）
     setTimeout(function() {
       if (!document.hidden) showToast('已调起高德地图 🗺️', 'success');
     }, 1500);

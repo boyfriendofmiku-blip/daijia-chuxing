@@ -4,6 +4,7 @@ import type { PluginListenerHandle } from '@capacitor/core';
 
 const AmapNaviPlugin = registerPlugin<{
   initialize(opts: NaviConfig): Promise<{ success: boolean }>;
+  startEmbeddedNavi(opts: NaviLaunchOptions): Promise<{ success: boolean }>;
   launchNavi(opts: NaviLaunchOptions): Promise<{ success: boolean }>;
   isAmapInstalled(): Promise<{ installed: boolean }>;
   getCurrentLocation(): Promise<{ latitude: number; longitude: number }>;
@@ -16,6 +17,10 @@ const AmapNaviPlugin = registerPlugin<{
 export const AmapNavi: IAmapNaviPlugin = {
   initialize(config: NaviConfig) {
     return AmapNaviPlugin.initialize(config);
+  },
+
+  startEmbeddedNavi(options: NaviLaunchOptions) {
+    return AmapNaviPlugin.startEmbeddedNavi(options);
   },
 
   launchNavi(options: NaviLaunchOptions) {

@@ -33,8 +33,17 @@ export interface AmapNaviPlugin {
   initialize(config: NaviConfig): Promise<{ success: boolean }>;
 
   /**
-   * 启动导航（跳转高德导航 App）
-   * 如果安装了高德 App，会直接调起；否则内部使用 SDK 渲染
+   * 启动嵌入式全屏导航（App 内直接显示高德导航界面）
+   * 这是主要入口，会在 App 内全屏显示高德导航，包含逐条语音提示
+   *
+   * @param waypoints 途经点：[起点, 终点]，至少2个点
+   * @param mode 0=驾车 1=步行 2=骑行
+   */
+  startEmbeddedNavi(options: NaviLaunchOptions): Promise<{ success: boolean }>;
+
+  /**
+   * 启动导航（跳转高德导航 App，兜底方案）
+   * 如果安装了高德 App，会直接调起；否则打开网页版
    */
   launchNavi(options: NaviLaunchOptions): Promise<{ success: boolean }>;
 

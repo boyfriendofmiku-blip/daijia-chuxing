@@ -14,6 +14,12 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <application>
+        <!-- 嵌入式高德导航 Activity -->
+        <activity
+            android:name=".AmapNaviViewActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
         <!-- 高德地图服务 -->
         <service
             android:name="com.amap.api.location.APSService"

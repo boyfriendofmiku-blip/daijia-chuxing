@@ -1251,14 +1251,20 @@ function initNavMap(orderId, _retries) {
     }
   }, 5000);
 
-  // 10秒超时：如果_navMapState仍未设置，说明初始化被订单校验拦截了，显示错误
+  // 10秒超时：如果_navMapState仍未设置，说明初始化被订单校验拦截了
+  // 注意：_navInitError 会在 _doInitNavMap 内部直接给出具体原因，这里只是兜底
   setTimeout(function() {
     if (!_navMapState) {
+      // 如果 _navInitError 已经更新了 UI，不需要再覆盖
       var instr = document.getElementById('nav-instruction');
-      var icon = document.getElementById('nav-instruction-icon');
-      if (instr) instr.innerHTML = '<div style="font-size:13px;color:#FF6B6B">导航初始化失败，请返回重试</div>';
-      if (icon) icon.textContent = '⚠️';
-      console.error('[NavMap] 10秒超时，初始化被拦截');
+      if (instr && instr.innerHTML.indexOf('正在规划路线') >= 0) {
+        // 还没有被更新，说明连 _doInitNavMap 都没跑到，可能是 AMap 没加载
+        var instr2 = document.getElementById('nav-instruction');
+        if (instr2) instr2.innerHTML = '<div style="font-size:13px;color:#FF6B6B">地图加载超时，请检查网络后返回重试</div>';
+        var icon2 = document.getElementById('nav-instruction-icon');
+        if (icon2) icon2.textContent = '⚠️';
+      }
+      console.error('[NavMap] 10秒超时，_navMapState 未初始化');
     }
   }, 10000);
 }
@@ -1332,19 +1338,34 @@ function _getTurnIcon(instruction) {
   return '⬆️';
 }
 
+function _navInitError(msg) {
+  console.error('[NavMap] 初始化失败:', msg);
+  var instr = document.getElementById('nav-instruction');
+  var icon  = document.getElementById('nav-instruction-icon');
+  if (instr) instr.innerHTML = '<div style="font-size:13px;color:#FF6B6B">' + msg + '</div>';
+  if (icon)  icon.textContent = '⚠️';
+}
+
 function _doInitNavMap(orderId, container) {
   console.log('[NavMap] _doInitNavMap 被调用, orderId:', orderId);
-  
+
+  if (!orderId) { _navInitError('订单ID缺失，请返回重试'); return; }
+  if (!container) { _navInitError('地图容器未找到，请返回重试'); return; }
+
   DB.getOrderById(orderId).then(function(order) {
-    console.log('[NavMap] 获取订单结果:', order ? '成功' : '失败', order ? order.id : '');
-    
-    // 两阶段目标坐标
-    var fromLat = parseFloat(order.fromLat) || 0; // 乘客上车地
-    var fromLng = parseFloat(order.fromLng) || 0;
-    var destLat  = parseFloat(order.toLat)  || 0; // 最终目的地
-    var destLng  = parseFloat(order.toLng)  || 0;
-    var fromName = order.from  || '上车地点';
-    var destName  = order.to   || '目的地';
+    console.log('[NavMap] 获取订单结果:', order ? '成功 status=' + order.status : '失败/null');
+
+    if (!order) { _navInitError('订单不存在，请返回刷新'); return; }
+
+    // 两阶段目标坐标（supabase.js 已将字段映射为驼峰：fromLat/fromLng/toLat/toLng）
+    var fromLat  = parseFloat(order.fromLat)  || 0;
+    var fromLng  = parseFloat(order.fromLng)  || 0;
+    var destLat  = parseFloat(order.toLat)    || 0;
+    var destLng  = parseFloat(order.toLng)    || 0;
+    var fromName = order.from || '上车地点';
+    var destName = order.to   || '目的地';
+
+    console.log('[NavMap] 坐标信息: from=', fromLat, fromLng, 'to=', destLat, destLng, 'status=', order.status);
 
     // 根据订单状态判断当前阶段
     var currentPhase;
@@ -1352,23 +1373,40 @@ function _doInitNavMap(orderId, container) {
     if (order.status === 'accepted') {
       // 阶段1：骑行去接客，必须有乘客坐标
       if (!fromLat || !fromLng) {
-        console.warn('[NavMap] accepted阶段缺少乘客坐标');
+        _navInitError('乘客位置坐标缺失 (fromLat=' + fromLat + ',fromLng=' + fromLng + ')');
         return;
       }
       currentPhase = NAV_PHASE_RIDING;
       targetLat  = fromLat;
       targetLng  = fromLng;
       targetName = fromName;
-    } else {
-      // 阶段2：驾车送客（ongoing/completed等），必须有目的地坐标
+    } else if (order.status === 'ongoing') {
+      // 阶段2：代驾送客，必须有目的地坐标
       if (!destLat || !destLng) {
-        console.warn('[NavMap] ongoing阶段缺少目的地坐标');
+        _navInitError('目的地坐标缺失 (toLat=' + destLat + ',toLng=' + destLng + ')');
         return;
       }
       currentPhase = NAV_PHASE_DRIVING;
       targetLat  = destLat;
       targetLng  = destLng;
       targetName = destName;
+    } else {
+      // 其他状态（completed等）也尝试显示地图，使用最后已知目标
+      console.warn('[NavMap] 订单状态异常:', order.status, '尝试用已有坐标继续');
+      if (destLat && destLng) {
+        currentPhase = NAV_PHASE_DRIVING;
+        targetLat  = destLat;
+        targetLng  = destLng;
+        targetName = destName;
+      } else if (fromLat && fromLng) {
+        currentPhase = NAV_PHASE_RIDING;
+        targetLat  = fromLat;
+        targetLng  = fromLng;
+        targetName = fromName;
+      } else {
+        _navInitError('订单状态 ' + order.status + ' 且无有效坐标');
+        return;
+      }
     }
 
     // 获取司机当前位置
@@ -1481,6 +1519,9 @@ function _doInitNavMap(orderId, container) {
         _switchNavPhase(NAV_PHASE_DRIVING);
       }
     });
+  }).catch(function(err) {
+    console.error('[NavMap] _doInitNavMap 异常:', err);
+    _navInitError('初始化出错: ' + (err && err.message ? err.message : String(err)));
   });
 }
 

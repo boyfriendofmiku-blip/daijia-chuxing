@@ -20,23 +20,21 @@ android {
 repositories {
     mavenCentral()
     google()
-    // 高德地图 SDK Maven 仓库（阿里云）
+    // 高德地图 SDK Maven 仓库
     maven { url 'https://maven.aliyun.com/repository/public' }
-    maven { url 'https://maven.aliyun.com/repository/google' }
-    maven { url 'https://maven.aliyun.com/repository/central' }
 }
 
 dependencies {
     // 高德地图基础定位 SDK（~3MB，精准GPS）
-    implementation 'com.amap.api:location:6.1.0.2'
+    implementation 'com.amap.api:location:latest.integration'
 
-    // 高德地图 2D 地图 SDK（用于内嵌地图，~30MB）
-    implementation 'com.amap.api:map2d:6.1.0.3'
+    // 高德地图 3D 地图 SDK（用于内嵌地图，~30MB）
+    implementation 'com.amap.api:3dmap:latest.integration'
 
     // 高德导航 SDK（~15MB，逐条语音导航，内嵌全屏导航视图）
-    implementation 'com.amap.api:navi-3d:6.1.0.3'
+    implementation 'com.amap.api:navi-3dmap:latest.integration'
 
     // Capacitor core
-    implementation 'com.getcapacitor:core:8.3.0'
-    annotationProcessor 'com.getcapacitor:core:8.3.0'
+    implementation 'com.getcapacitor:core:latest.integration'
+    annotationProcessor 'com.getcapacitor:core:latest.integration'
 }

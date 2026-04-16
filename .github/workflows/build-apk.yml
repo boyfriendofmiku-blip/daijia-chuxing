@@ -61,6 +61,8 @@ jobs:
           echo "=== 验证插件已安装 ==="
           ls -la node_modules/@capacitor/amap-navi/
           ls -la node_modules/@capacitor/amap-navi/android/
+          echo "=== 检查插件 package.json ==="
+          cat node_modules/@capacitor/amap-navi/package.json
 
       - name: Initialize Capacitor
         run: npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
@@ -71,7 +73,16 @@ jobs:
           npx cap add android
 
       - name: Sync plugins and web assets
-        run: npx cap sync android
+        run: |
+          npx cap sync android
+          echo "=== 检查 sync 后的 android 项目 ==="
+          echo "=== app/build.gradle dependencies ==="
+          cat android/app/build.gradle | grep -A20 "dependencies"
+          echo "=== settings.gradle ==="
+          cat android/settings.gradle
+          echo "=== 检查插件是否被包含 ==="
+          grep -r "amap" android/app/build.gradle || echo "未找到 amap 相关配置"
+          grep -r "capacitor-amap-navi" android/settings.gradle || echo "未在 settings.gradle 中找到插件"
 
       - name: Ensure Maven repos in build.gradle
         run: |
@@ -84,13 +95,11 @@ jobs:
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           sed -i 's|</manifest>|  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n</manifest>|' "$MANIFEST"
           sed -i 's|android:theme="@style/AppTheme">|android:theme="@style/AppTheme" android:usesCleartextTraffic="true">|' "$MANIFEST"
-          echo "=== 权限配置完成 ==="
 
       - name: Create network security config
         run: |
           mkdir -p android/app/src/main/res/xml
           printf '<?xml version="1.0" encoding="utf-8"?>\n<network-security-config>\n    <base-config cleartextTrafficPermitted="true">\n        <trust-anchors>\n            <certificates src="system" />\n            <certificates src="user" />\n        </trust-anchors>\n    </base-config>\n    <domain-config cleartextTrafficPermitted="true">\n        <domain includeSubdomains="true">webapi.amap.com</domain>\n        <domain includeSubdomains="true">restapi.amap.com</domain>\n        <domain includeSubdomains="true">m.amap.com</domain>\n        <domain includeSubdomains="true">www.amap.com</domain>\n        <domain includeSubdomains="true">uri.amap.com</domain>\n    </domain-config>\n</network-security-config>\n' > android/app/src/main/res/xml/network_security_config.xml
-          echo "=== network_security_config.xml 创建完成 ==="
 
       - name: Setup signing keystore
         run: |
@@ -127,6 +136,8 @@ jobs:
           ls -lh android/app/build/outputs/apk/release/app-release.apk
           echo "=== 检查 APK 中的 .so 文件 ==="
           unzip -l android/app/build/outputs/apk/release/app-release.apk | grep -E "\.so$|amap|navi" || echo "检查 APK 内容..."
+          echo "=== 检查 APK 中是否有高德 SDK ==="
+          unzip -l android/app/build/outputs/apk/release/app-release.apk | wc -l
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2

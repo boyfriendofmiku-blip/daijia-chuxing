@@ -55,16 +55,9 @@ jobs:
           # TODO: 暂时禁用 amap-navi 插件（高德SDK集成存在兼容性问题）
           # rm -rf node_modules/@capacitor/amap-navi 2>/dev/null || true
 
-      - name: Add Android platform
-        run: npx cap add android
-
-      - name: Sync plugins and web assets
+            - name: Sync plugins and web assets
         run: |
-          npx cap sync android
-          echo "=== Sync 完成后检查插件配置 ==="
-          cat android/settings.gradle
-          echo ""
-          echo "=== app/build.gradle dependencies ==="
+          npx cap sync android/build.gradle dependencies ==="
           grep -A5 "dependencies" android/app/build.gradle | grep -v "^--$"
 
       - name: Ensure Maven repos in all build.gradle files

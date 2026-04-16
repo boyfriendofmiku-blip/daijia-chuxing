@@ -54,12 +54,6 @@ jobs:
           npm install @capacitor/geolocation
           npm install @capacitor/app
 
-      - name: Install local amap-navi plugin
-        run: |
-          mkdir -p node_modules/@capacitor
-          cp -r capacitor-amap-navi node_modules/@capacitor/amap-navi
-          ls -la node_modules/@capacitor/amap-navi/
-
       - name: Initialize Capacitor
         run: npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
 
@@ -74,7 +68,8 @@ jobs:
       - name: Manually add amap-navi plugin to settings.gradle
         run: |
           echo "=== 添加 amap-navi 到 settings.gradle ==="
-          sed -i "/apply from: 'capacitor.settings.gradle'/i include ':capacitor-amap-navi'\nproject(':capacitor-amap-navi').projectDir = new File('../node_modules/@capacitor/amap-navi/android')" android/settings.gradle
+          # 使用 npm 安装后的路径
+          sed -i "/apply from: 'capacitor.settings.gradle'/i include ':capacitor-amap-navi'\nproject(':capacitor-amap-navi').projectDir = new File(rootProject.rootDir, '../node_modules/@capacitor/amap-navi/android')" android/settings.gradle
           cat android/settings.gradle
 
       - name: Add amap-navi to app/build.gradle

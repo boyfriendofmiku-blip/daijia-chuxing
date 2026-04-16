@@ -1,0 +1,7 @@
+plugins {
+    id 'com.android.library'
+}
+
+dependencies {
+    compileOnly 'com.getcapacitor:core:8.3.0'
+}

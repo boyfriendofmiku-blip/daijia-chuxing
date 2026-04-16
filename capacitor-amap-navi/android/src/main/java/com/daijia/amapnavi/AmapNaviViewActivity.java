@@ -14,7 +14,7 @@ import androidx.core.content.ContextCompat;
 
 import com.amap.api.navi.AmapNaviParams;
 import com.amap.api.navi.AmapNaviType;
-import com.amap.api.nvi.NaviType;
+import com.amap.api.navi.NaviType;
 import com.amap.api.navi.AMapNavi;
 import com.amap.api.navi.AMapNaviListener;
 import com.amap.api.navi.INaviInfoCallback;
@@ -30,6 +30,7 @@ import com.amap.api.navi.model.AMapNaviRoadFlagInfo;
 import com.amap.api.navi.model.AMapNaviRouteNotifyData;
 import com.amap.api.navi.model.AMapNaviSetting;
 import com.amap.api.navi.model.AMapNaviTurnDrowsee;
+import com.amap.api.navi.model.AMapNaviServiceAreaInfo;
 import com.amap.api.navi.model.AimLessModeStat;
 import com.amap.api.navi.model.NaviInfo;
 import com.autonavi.ae.pos.LocationErrorType;
@@ -64,7 +65,7 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     private static final int REQUEST_PERMISSION = 1001;
 
     // 导航视图（原生全屏导航界面）
-    private com.amap.api.nvi.AMapNaviView naviView;
+    private com.amap.api.navi.AMapNaviView naviView;
 
     // 导航类型：0=驾车 1=步行 2=骑行
     private int naviType = 0;
@@ -83,10 +84,10 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
         AMapNavi.getInstance(this).addAMapNaviListener(this);
 
         // 创建导航视图
-        naviView = new com.amap.api.nvi.AMapNaviView(this);
+        naviView = new com.amap.api.navi.AMapNaviView(this);
         naviView.setNaviViewListener(this);
-        naviView.setExtendMode(com.amap.api.nvi.AMapNaviView.GD_EXTEND_MODE_NOT);
-        naviView.setMode(AMapNaviView.Navi_Mode.Day_Mode);
+        naviView.setExtendMode(com.amap.api.navi.AMapNaviView.GD_EXTEND_MODE_NOT);
+        naviView.setMode(com.amap.api.navi.AMapNaviView.Navi_Mode.Day_Mode);
         setContentView(naviView);
 
         Log.i(TAG, "AmapNaviViewActivity created");
@@ -430,7 +431,7 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     }
 
     @Override
-    public void onNaviViewShow(boolean b, com.amap.api.nvi.NaviType naviType) {
+    public void onNaviViewShow(boolean b, com.amap.api.navi.NaviType naviType) {
         Log.i(TAG, "导航视图显示: " + b + ", 类型: " + naviType);
     }
 

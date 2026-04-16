@@ -56,6 +56,9 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Sync local plugins (capacitor-amap-navi)
+        run: npx cap sync
+
       - name: Inject Android permissions and network config into AndroidManifest.xml
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"

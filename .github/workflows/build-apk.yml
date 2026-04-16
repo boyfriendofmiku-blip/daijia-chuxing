@@ -87,10 +87,31 @@ jobs:
           echo "=== app/build.gradle dependencies ==="
           grep -A5 "dependencies" android/app/build.gradle | grep -v "^--$"
 
-      - name: Verify Maven repos in plugin build.gradle
+      - name: Ensure Maven repos in all build.gradle files
         run: |
-          echo "=== 检查插件 build.gradle 中的 repositories ==="
-          cat node_modules/@capacitor/amap-navi/android/build.gradle | grep -A10 "repositories"
+          # 确保主项目的 allprojects 有阿里云仓库
+          if ! grep -q "maven.aliyun.com" android/build.gradle; then
+            echo "添加阿里云 Maven 仓库到 android/build.gradle"
+            sed -i '/^allprojects {$/,/^}$/s/repositories {/repositories {\n        maven { url "https:\/\/maven.aliyun.com\/repository\/public" }\n        maven { url "https:\/\/maven.aliyun.com\/repository\/google" }\n        maven { url "https:\/\/maven.aliyun.com\/repository\/central" }/' android/build.gradle
+          fi
+          
+          # 验证配置
+          echo "=== android/build.gradle allprojects 块 ==="
+          sed -n '/^allprojects {/,/^}$/p' android/build.gradle
+
+      - name: Verify plugin build.gradle has Maven repos
+        run: |
+          echo "=== 检查插件 build.gradle repositories ==="
+          cat node_modules/@capacitor/amap-navi/android/build.gradle | head -30
+          
+          # 如果插件没有阿里云仓库，手动添加
+          if ! grep -q "maven.aliyun.com" node_modules/@capacitor/amap-navi/android/build.gradle; then
+            echo "警告: 插件 build.gradle 缺少阿里云仓库，添加中..."
+            sed -i '/^repositories {$/a\    maven { url "https://maven.aliyun.com/repository/public" }\n    maven { url "https://maven.aliyun.com/repository/google" }\n    maven { url "https://maven.aliyun.com/repository/central" }' node_modules/@capacitor/amap-navi/android/build.gradle
+          fi
+          
+          echo "=== 更新后的插件 build.gradle ==="
+          cat node_modules/@capacitor/amap-navi/android/build.gradle | head -35
 
       - name: Inject Android permissions and network config into AndroidManifest.xml
         run: |
@@ -100,33 +121,26 @@ jobs:
           # 添加网络配置允许加载高德地图
           sed -i 's|android:theme="@style/AppTheme">|android:theme="@style/AppTheme" android:usesCleartextTraffic="true">|' "$MANIFEST"
           echo "=== 权限和网络配置注入完成 ==="
-          grep 'permission' "$MANIFEST"
-          grep 'usesCleartext' "$MANIFEST"
 
       - name: Create network security config for map APIs
         run: |
           mkdir -p android/app/src/main/res/xml
           printf '<?xml version="1.0" encoding="utf-8"?>\n<network-security-config>\n    <base-config cleartextTrafficPermitted="true">\n        <trust-anchors>\n            <certificates src="system" />\n            <certificates src="user" />\n        </trust-anchors>\n    </base-config>\n    <domain-config cleartextTrafficPermitted="true">\n        <domain includeSubdomains="true">webapi.amap.com</domain>\n        <domain includeSubdomains="true">restapi.amap.com</domain>\n        <domain includeSubdomains="true">m.amap.com</domain>\n        <domain includeSubdomains="true">www.amap.com</domain>\n        <domain includeSubdomains="true">uri.amap.com</domain>\n        <domain includeSubdomains="true">fs.indoorcloud.com</domain>\n    </domain-config>\n</network-security-config>\n' > android/app/src/main/res/xml/network_security_config.xml
-          echo "=== 网络安全配置已创建 ==="
 
       - name: Update capacitor.config.json with allowNavigation
         run: |
-          # 更新 capacitor.config.json 添加高德地图域名
           if grep -q '"allowNavigation"' capacitor.config.json; then
             sed -i 's|"allowNavigation": \[|"allowNavigation": ["webapi.amap.com", "restapi.amap.com",|' capacitor.config.json
           fi
-          echo "=== Capacitor 配置已更新 ==="
 
       - name: Setup signing keystore
         run: |
           KEYSTORE_PATH="${GITHUB_WORKSPACE}/daijia-release.jks"
 
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            # 使用 GitHub Secret 中存储的固定 keystore
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$KEYSTORE_PATH"
             echo "已从 Secret 加载固定 keystore"
           else
-            # 首次生成 keystore
             keytool -genkeypair \
               -alias "$KEY_ALIAS" \
               -keyalg RSA \
@@ -137,28 +151,21 @@ jobs:
               -keypass "$KEY_PASSWORD" \
               -dname "CN=DaiJia, OU=App, O=DaiJia, L=China, ST=China, C=CN" \
               -noprompt
-            echo ""
-            echo "========================================================"
-            echo "首次生成 keystore！请将以下 Base64 内容添加到"
-            echo "   GitHub → Settings → Secrets → KEYSTORE_BASE64"
-            echo "   否则每次构建签名不同，无法直接覆盖安装！"
-            echo "========================================================"
-            echo ""
-            base64 -w 0 "$KEYSTORE_PATH"
-            echo ""
-            echo "========================================================"
           fi
 
           echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> $GITHUB_ENV
 
-      - name: Sync web assets to Android
-        run: npx cap sync android
-
-      - name: Build signed APK (release)
+      - name: Clear Gradle cache and build APK
         working-directory: android
         run: |
+          # 清理可能损坏的缓存
+          rm -rf ~/.gradle/caches/modules-2/files-2.1/com.amap.api 2>/dev/null || true
+          rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
+          
           chmod +x gradlew
-          ./gradlew assembleRelease \
+          
+          # 使用 --refresh-dependencies 强制重新下载
+          ./gradlew clean assembleRelease --refresh-dependencies \
             -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" \
             -Pandroid.injected.signing.store.password="${STORE_PASSWORD}" \
             -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" \

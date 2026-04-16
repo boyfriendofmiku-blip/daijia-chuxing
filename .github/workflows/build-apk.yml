@@ -52,59 +52,27 @@ jobs:
           npm install
           npm install @capacitor/android
           npm install @capacitor/geolocation
-          # TODO: 暂时禁用 amap-navi 插件（高德SDK集成存在兼容性问题）
-          # rm -rf node_modules/@capacitor/amap-navi 2>/dev/null || true
 
-            - name: Sync plugins and web assets
-        run: |
-          npx cap sync android/build.gradle dependencies ==="
-          grep -A5 "dependencies" android/app/build.gradle | grep -v "^--$"
+      - name: Sync plugins and web assets
+        run: npx cap sync android
 
       - name: Ensure Maven repos in all build.gradle files
         run: |
-          # 确保主项目的 allprojects 有阿里云仓库
           if ! grep -q "maven.aliyun.com" android/build.gradle; then
             echo "添加阿里云 Maven 仓库到 android/build.gradle"
             sed -i '/^allprojects {$/,/^}$/s/repositories {/repositories {\n        maven { url "https:\/\/maven.aliyun.com\/repository\/public" }\n        maven { url "https:\/\/maven.aliyun.com\/repository\/google" }\n        maven { url "https:\/\/maven.aliyun.com\/repository\/central" }/' android/build.gradle
           fi
-          
-          # 验证配置
-          echo "=== android/build.gradle allprojects 块 ==="
-          sed -n '/^allprojects {/,/^}$/p' android/build.gradle
-
-      - name: Verify plugin build.gradle has Maven repos
-        run: |
-          echo "=== 检查插件 build.gradle repositories ==="
-          cat node_modules/@capacitor/amap-navi/android/build.gradle | head -30
-          
-          # 如果插件没有阿里云仓库，手动添加
-          if ! grep -q "maven.aliyun.com" node_modules/@capacitor/amap-navi/android/build.gradle; then
-            echo "警告: 插件 build.gradle 缺少阿里云仓库，添加中..."
-            sed -i '/^repositories {$/a\    maven { url "https://maven.aliyun.com/repository/public" }\n    maven { url "https://maven.aliyun.com/repository/google" }\n    maven { url "https://maven.aliyun.com/repository/central" }' node_modules/@capacitor/amap-navi/android/build.gradle
-          fi
-          
-          echo "=== 更新后的插件 build.gradle ==="
-          cat node_modules/@capacitor/amap-navi/android/build.gradle | head -35
 
       - name: Inject Android permissions and network config into AndroidManifest.xml
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          # 添加位置权限
           sed -i 's|</manifest>|  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n</manifest>|' "$MANIFEST"
-          # 添加网络配置允许加载高德地图
           sed -i 's|android:theme="@style/AppTheme">|android:theme="@style/AppTheme" android:usesCleartextTraffic="true">|' "$MANIFEST"
-          echo "=== 权限和网络配置注入完成 ==="
 
       - name: Create network security config for map APIs
         run: |
           mkdir -p android/app/src/main/res/xml
-          printf '<?xml version="1.0" encoding="utf-8"?>\n<network-security-config>\n    <base-config cleartextTrafficPermitted="true">\n        <trust-anchors>\n            <certificates src="system" />\n            <certificates src="user" />\n        </trust-anchors>\n    </base-config>\n    <domain-config cleartextTrafficPermitted="true">\n        <domain includeSubdomains="true">webapi.amap.com</domain>\n        <domain includeSubdomains="true">restapi.amap.com</domain>\n        <domain includeSubdomains="true">m.amap.com</domain>\n        <domain includeSubdomains="true">www.amap.com</domain>\n        <domain includeSubdomains="true">uri.amap.com</domain>\n        <domain includeSubdomains="true">fs.indoorcloud.com</domain>\n    </domain-config>\n</network-security-config>\n' > android/app/src/main/res/xml/network_security_config.xml
-
-      - name: Update capacitor.config.json with allowNavigation
-        run: |
-          if grep -q '"allowNavigation"' capacitor.config.json; then
-            sed -i 's|"allowNavigation": \[|"allowNavigation": ["webapi.amap.com", "restapi.amap.com",|' capacitor.config.json
-          fi
+          printf '<?xml version="1.0" encoding="utf-8"?>\n<network-security-config>\n    <base-config cleartextTrafficPermitted="true">\n        <trust-anchors>\n            <certificates src="system" />\n            <certificates src="user" />\n        </trust-anchors>\n    </base-config>\n    <domain-config cleartextTrafficPermitted="true">\n        <domain includeSubdomains="true">webapi.amap.com</domain>\n        <domain includeSubdomains="true">restapi.amap.com</domain>\n        <domain includeSubdomains="true">m.amap.com</domain>\n        <domain includeSubdomains="true">www.amap.com</domain>\n        <domain includeSubdomains="true">uri.amap.com</domain>\n    </domain-config>\n</network-security-config>\n' > android/app/src/main/res/xml/network_security_config.xml
 
       - name: Setup signing keystore
         run: |
@@ -131,13 +99,11 @@ jobs:
       - name: Clear Gradle cache and build APK
         working-directory: android
         run: |
-          # 清理可能损坏的缓存
           rm -rf ~/.gradle/caches/modules-2/files-2.1/com.amap.api 2>/dev/null || true
           rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
-          
+
           chmod +x gradlew
-          
-          # 使用 --refresh-dependencies 强制重新下载
+
           ./gradlew clean assembleRelease --refresh-dependencies \
             -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" \
             -Pandroid.injected.signing.store.password="${STORE_PASSWORD}" \
@@ -156,8 +122,6 @@ jobs:
             1. 点击 `daijia-chuxing.apk` 下载安装
             2. 首次安装需要允许"安装未知来源应用"
             3. 更新时直接安装即可覆盖（同一签名）
-
-            🔗 在线体验：https://pdfeihong.top
           files: android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: false
         env:
@@ -166,5 +130,5 @@ jobs:
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dajia-chuxing.apk
+          name: daijia-chuxing.apk
           path: android/app/build/outputs/apk/release/app-release.apk

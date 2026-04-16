@@ -73,7 +73,7 @@ jobs:
         run: |
           rm -rf android
           echo "=== Running cap add android ==="
-          npx @capacitor/cli add android --no-interactive
+          npx cap add android
           echo "=== cap add completed ==="
           echo "=== android directory ==="
           ls -la android/

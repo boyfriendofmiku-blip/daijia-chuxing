@@ -52,63 +52,67 @@ jobs:
           npm install
           npm install @capacitor/android
           npm install @capacitor/geolocation
+          npm install @capacitor/app
 
-      - name: Debug capacitor config
+      - name: Install local amap-navi plugin
         run: |
-          echo "=== Node version ==="
-          node --version
-          echo "=== npm version ==="
-          npm --version
-          echo "=== capacitor version ==="
-          npx @capacitor/cli --version
-          echo "=== capacitor.config.json ==="
-          cat capacitor.config.json
-          echo "=== package.json dependencies ==="
-          cat package.json | grep -A20 '"dependencies"'
-          echo "=== node_modules/@capacitor/cli ==="
-          ls -la node_modules/@capacitor/cli/ 2>/dev/null || echo "NOT FOUND"
-          ls -la node_modules/@capacitor/ 2>/dev/null || echo "@capacitor dir NOT FOUND"
+          mkdir -p node_modules/@capacitor
+          cp -r capacitor-amap-navi node_modules/@capacitor/amap-navi
+          echo "=== 验证插件已安装 ==="
+          ls -la node_modules/@capacitor/amap-navi/
+          ls -la node_modules/@capacitor/amap-navi/android/
+
+      - name: Initialize Capacitor
+        run: |
+          npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
 
       - name: Add Android platform
         run: |
           rm -rf android
-          echo "=== Running cap init ==="
-          npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
-          echo "=== cap init completed ==="
-          echo "=== capacitor.config.json ==="
-          cat capacitor.config.json
-          echo "=== Running cap add android ==="
           npx cap add android
-          echo "=== cap add completed ==="
-          echo "=== android directory ==="
-          ls -la android/
-          echo "=== android/capacitor.config.json ==="
-          cat android/capacitor.config.json 2>/dev/null || echo "NOT FOUND"
 
       - name: Sync plugins and web assets
         run: npx cap sync android
 
-      - name: Ensure Maven repos in all build.gradle files
+      - name: Ensure Maven repos in build.gradle
         run: |
-          # 添加阿里云和Google Maven仓库
-          if ! grep -q "maven.aliyun.com" android/build.gradle; then
-            sed -i 's|repositories {|repositories {\n        maven { url "https://maven.aliyun.com/repository/google" }\n        maven { url "https://maven.aliyun.com/repository/central" }\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://dl.google.com/dl/android/maven2/" }|' android/build.gradle
-          fi
-          # 确保有Google Maven仓库作为备用
-          if ! grep -q "dl.google.com" android/build.gradle; then
-            sed -i 's|repositories {|repositories {\n        maven { url "https://dl.google.com/dl/android/maven2/" }|' android/build.gradle
-          fi
+          echo "=== 添加 Maven 仓库到 android/build.gradle ==="
+          # 在 allprojects.repositories 前添加阿里云和Google仓库
+          sed -i "s|repositories {|repositories {\n        maven { url 'https://maven.aliyun.com/repository/google' }\n        maven { url 'https://maven.aliyun.com/repository/central' }\n        maven { url 'https://maven.aliyun.com/repository/public' }\n        maven { url 'https://dl.google.com/dl/android/maven2/' }|" android/build.gradle
+          echo "=== 验证 build.gradle ==="
+          grep -A10 "allprojects" android/build.gradle
 
-      - name: Inject Android permissions and network config into AndroidManifest.xml
+      - name: Configure AndroidManifest permissions
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          sed -i 's|</manifest>|  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n</manifest>|' "$MANIFEST"
+          # 添加位置权限
+          sed -i 's|</manifest>|  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n</manifest>|' "$MANIFEST"
+          # 添加网络配置
           sed -i 's|android:theme="@style/AppTheme">|android:theme="@style/AppTheme" android:usesCleartextTraffic="true">|' "$MANIFEST"
+          echo "=== 权限配置完成 ==="
 
-      - name: Create network security config for map APIs
+      - name: Create network security config
         run: |
           mkdir -p android/app/src/main/res/xml
-          printf '<?xml version="1.0" encoding="utf-8"?>\n<network-security-config>\n    <base-config cleartextTrafficPermitted="true">\n        <trust-anchors>\n            <certificates src="system" />\n            <certificates src="user" />\n        </trust-anchors>\n    </base-config>\n    <domain-config cleartextTrafficPermitted="true">\n        <domain includeSubdomains="true">webapi.amap.com</domain>\n        <domain includeSubdomains="true">restapi.amap.com</domain>\n        <domain includeSubdomains="true">m.amap.com</domain>\n        <domain includeSubdomains="true">www.amap.com</domain>\n        <domain includeSubdomains="true">uri.amap.com</domain>\n    </domain-config>\n</network-security-config>\n' > android/app/src/main/res/xml/network_security_config.xml
+          cat > android/app/src/main/res/xml/network_security_config.xml << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">webapi.amap.com</domain>
+        <domain includeSubdomains="true">restapi.amap.com</domain>
+        <domain includeSubdomains="true">m.amap.com</domain>
+        <domain includeSubdomains="true">www.amap.com</domain>
+        <domain includeSubdomains="true">uri.amap.com</domain>
+    </domain-config>
+</network-security-config>
+EOF
+          echo "=== network_security_config.xml 创建完成 ==="
 
       - name: Setup signing keystore
         run: |
@@ -134,19 +138,19 @@ jobs:
       - name: Build APK
         working-directory: android
         run: |
-          # 添加 gradle.properties 配置
-          if ! grep -q "dl.google.com" gradle.properties; then
-            echo "" >> gradle.properties
-            echo "# Maven 仓库配置" >> gradle.properties
-            echo "android.enableJetifier=false" >> gradle.properties
-          fi
-          
           chmod +x gradlew
-          ./gradlew clean assembleRelease --refresh-dependencies --no-daemon \
+          ./gradlew clean assembleRelease --no-daemon \
             -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" \
             -Pandroid.injected.signing.store.password="${STORE_PASSWORD}" \
             -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" \
             -Pandroid.injected.signing.key.password="${KEY_PASSWORD}"
+
+      - name: Verify APK contains native libraries
+        run: |
+          echo "=== 检查 APK 大小 ==="
+          ls -lh android/app/build/outputs/apk/release/app-release.apk
+          echo "=== 检查 APK 中的 .so 文件 ==="
+          unzip -l android/app/build/outputs/apk/release/app-release.apk | grep -E "\.so$|amap|navi" || echo "检查 APK 内容..."
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2

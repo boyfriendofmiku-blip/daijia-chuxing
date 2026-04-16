@@ -75,7 +75,13 @@ jobs:
         run: npx cap add android
 
       - name: Sync plugins and web assets
-        run: npx cap sync android
+        run: |
+          npx cap sync android
+          echo "=== Sync 完成后检查插件配置 ==="
+          cat android/settings.gradle
+          echo ""
+          echo "=== app/build.gradle dependencies ==="
+          grep -A5 "dependencies" android/app/build.gradle | grep -v "^--$"
 
       - name: Inject Maven repos for Amap SDK into plugin build.gradle
         run: |
@@ -89,6 +95,9 @@ jobs:
             fi
             echo "=== 插件 build.gradle 已更新 ==="
             cat "$PLUGIN_BUILD"
+          else
+            echo "!!! 插件 build.gradle 不存在 !!!"
+            find android -name "build.gradle" -type f
           fi
 
       - name: Inject Android permissions and network config into AndroidManifest.xml

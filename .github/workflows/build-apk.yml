@@ -77,6 +77,20 @@ jobs:
       - name: Sync plugins and web assets
         run: npx cap sync android
 
+      - name: Inject Maven repos for Amap SDK into plugin build.gradle
+        run: |
+          PLUGIN_BUILD="android/capacitor-amap-navi/build.gradle"
+          if [ -f "$PLUGIN_BUILD" ]; then
+            # 在 repositories 块中添加阿里云 Maven 仓库
+            if ! grep -q "maven.aliyun.com" "$PLUGIN_BUILD"; then
+              sed -i "/repositories {/a\\        maven { url 'https://maven.aliyun.com/repository/public' }" "$PLUGIN_BUILD"
+              sed -i "/repositories {/a\\        maven { url 'https://maven.aliyun.com/repository/google' }" "$PLUGIN_BUILD"
+              sed -i "/repositories {/a\\        maven { url 'https://maven.aliyun.com/repository/central' }" "$PLUGIN_BUILD"
+            fi
+            echo "=== 插件 build.gradle 已更新 ==="
+            cat "$PLUGIN_BUILD"
+          fi
+
       - name: Inject Android permissions and network config into AndroidManifest.xml
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"

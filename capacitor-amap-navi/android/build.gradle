@@ -25,12 +25,6 @@ repositories {
 }
 
 dependencies {
-    // 高德地图基础定位 SDK
-    implementation 'com.amap.api:location:6.9.0'
-
-    // 高德地图 3D 地图 SDK
-    implementation 'com.amap.api:3dmap:10.0.600'
-
-    // 高德导航 SDK
-    implementation 'com.amap.api:navi-3dmap:10.0.600_3dmap10.0.600'
+    // 使用高德导航定位搜索一体化包（包含导航+定位功能）
+    implementation 'com.amap.api:navi-3dmap-location-search:10.0.700_3dmap10.0.700_loc6.4.5_sea9.7.2'
 }

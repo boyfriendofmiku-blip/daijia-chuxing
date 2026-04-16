@@ -53,13 +53,17 @@ jobs:
           npm install @capacitor/android
           npm install @capacitor/geolocation
 
+      - name: Add Android platform
+        run: |
+          rm -rf android
+          npx cap add android
+
       - name: Sync plugins and web assets
         run: npx cap sync android
 
       - name: Ensure Maven repos in all build.gradle files
         run: |
           if ! grep -q "maven.aliyun.com" android/build.gradle; then
-            echo "添加阿里云 Maven 仓库到 android/build.gradle"
             sed -i '/^allprojects {$/,/^}$/s/repositories {/repositories {\n        maven { url "https:\/\/maven.aliyun.com\/repository\/public" }\n        maven { url "https:\/\/maven.aliyun.com\/repository\/google" }\n        maven { url "https:\/\/maven.aliyun.com\/repository\/central" }/' android/build.gradle
           fi
 
@@ -80,7 +84,6 @@ jobs:
 
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$KEYSTORE_PATH"
-            echo "已从 Secret 加载固定 keystore"
           else
             keytool -genkeypair \
               -alias "$KEY_ALIAS" \
@@ -96,14 +99,11 @@ jobs:
 
           echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> $GITHUB_ENV
 
-      - name: Clear Gradle cache and build APK
+      - name: Build APK
         working-directory: android
         run: |
           rm -rf ~/.gradle/caches/modules-2/files-2.1/com.amap.api 2>/dev/null || true
-          rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
-
           chmod +x gradlew
-
           ./gradlew clean assembleRelease --refresh-dependencies \
             -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" \
             -Pandroid.injected.signing.store.password="${STORE_PASSWORD}" \
@@ -122,6 +122,8 @@ jobs:
             1. 点击 `daijia-chuxing.apk` 下载安装
             2. 首次安装需要允许"安装未知来源应用"
             3. 更新时直接安装即可覆盖（同一签名）
+
+            🔗 在线体验：https://pdfeihong.top
           files: android/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: false
         env:

@@ -53,16 +53,23 @@ jobs:
           npm install @capacitor/android
           npm install @capacitor/geolocation
 
-      - name: Link local plugin capacitor-amap-navi
+      - name: Link and build local plugin capacitor-amap-navi
         run: |
-          cd node_modules
-          mkdir -p capacitor-amap-navi
-          cp -r ../capacitor-amap-navi/* capacitor-amap-navi/
-          cd capacitor-amap-navi
+          # 复制插件到 node_modules
+          mkdir -p node_modules/capacitor-amap-navi
+          cp -r capacitor-amap-navi/* node_modules/capacitor-amap-navi/
+          
+          # 安装插件依赖
+          cd node_modules/capacitor-amap-navi
           npm install
+          
+          # 编译 TypeScript
+          npm run build
           cd ../..
-          echo "=== 插件已链接 ==="
+          
+          echo "=== 插件已链接并编译 ==="
           ls -la node_modules/capacitor-amap-navi/
+          ls -la node_modules/capacitor-amap-navi/dist/ 2>/dev/null || echo "dist目录不存在"
 
       - name: Add Android platform
         run: npx cap add android

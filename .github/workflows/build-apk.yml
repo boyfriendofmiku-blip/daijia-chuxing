@@ -90,8 +90,13 @@ jobs:
 
       - name: Ensure Maven repos in all build.gradle files
         run: |
+          # 添加阿里云和Google Maven仓库
           if ! grep -q "maven.aliyun.com" android/build.gradle; then
-            sed -i '/^allprojects {$/,/^}$/s/repositories {/repositories {\n        maven { url "https:\/\/maven.aliyun.com\/repository\/public" }\n        maven { url "https:\/\/maven.aliyun.com\/repository\/google" }\n        maven { url "https:\/\/maven.aliyun.com\/repository\/central" }/' android/build.gradle
+            sed -i 's|repositories {|repositories {\n        maven { url "https://maven.aliyun.com/repository/google" }\n        maven { url "https://maven.aliyun.com/repository/central" }\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://dl.google.com/dl/android/maven2/" }|' android/build.gradle
+          fi
+          # 确保有Google Maven仓库作为备用
+          if ! grep -q "dl.google.com" android/build.gradle; then
+            sed -i 's|repositories {|repositories {\n        maven { url "https://dl.google.com/dl/android/maven2/" }|' android/build.gradle
           fi
 
       - name: Inject Android permissions and network config into AndroidManifest.xml
@@ -129,8 +134,15 @@ jobs:
       - name: Build APK
         working-directory: android
         run: |
+          # 添加 gradle.properties 配置
+          if ! grep -q "dl.google.com" gradle.properties; then
+            echo "" >> gradle.properties
+            echo "# Maven 仓库配置" >> gradle.properties
+            echo "android.enableJetifier=false" >> gradle.properties
+          fi
+          
           chmod +x gradlew
-          ./gradlew clean assembleRelease --refresh-dependencies \
+          ./gradlew clean assembleRelease --refresh-dependencies --no-daemon \
             -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" \
             -Pandroid.injected.signing.store.password="${STORE_PASSWORD}" \
             -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" \

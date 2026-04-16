@@ -85,7 +85,12 @@ jobs:
 
       - name: Ensure Maven repos in build.gradle
         run: |
-          sed -i "s|repositories {|repositories {\n        maven { url 'https://maven.aliyun.com/repository/google' }\n        maven { url 'https://maven.aliyun.com/repository/central' }\n        maven { url 'https://maven.aliyun.com/repository/public' }\n        maven { url 'https://dl.google.com/dl/android/maven2/' }|" android/build.gradle
+          # 先备份原文件
+          cp android/build.gradle android/build.gradle.bak
+          # 在 buildscript repositories 之前添加主仓库
+          sed -i 's|buildscript {|buildscript {\n        repositories {\n            google()\n            mavenCentral()\n            maven { url "https://maven.aliyun.com/repository/google" }\n            maven { url "https://maven.aliyun.com/repository/central" }\n            maven { url "https://maven.aliyun.com/repository/public" }\n        }\n|;' android/build.gradle
+          # 在 allprojects repositories 之前添加主仓库
+          sed -i 's|allprojects {|allprojects {\n        repositories {\n            google()\n            mavenCentral()\n            maven { url "https://maven.aliyun.com/repository/google" }\n            maven { url "https://maven.aliyun.com/repository/central" }\n            maven { url "https://maven.aliyun.com/repository/public" }\n        }\n|;' android/build.gradle
 
       - name: Configure AndroidManifest permissions
         run: |
@@ -110,9 +115,21 @@ jobs:
 
       - name: Build APK
         working-directory: android
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dkotlin.incremental=false"
         run: |
           chmod +x gradlew
-          ./gradlew clean assembleRelease --no-daemon -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" -Pandroid.injected.signing.store.password="${STORE_PASSWORD}" -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" -Pandroid.injected.signing.key.password="${KEY_PASSWORD}"
+          # 多次尝试构建，因为阿里云镜像不稳定
+          ./gradlew clean assembleRelease --no-daemon --stacktrace \
+            -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" \
+            -Pandroid.injected.signing.store.password="${STORE_PASSWORD}" \
+            -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" \
+            -Pandroid.injected.signing.key.password="${KEY_PASSWORD}" \
+            || ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" \
+            -Pandroid.injected.signing.store.password="${STORE_PASSWORD}" \
+            -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" \
+            -Pandroid.injected.signing.key.password="${KEY_PASSWORD}"
 
       - name: Verify APK contains native libraries
         run: |

@@ -53,10 +53,32 @@ jobs:
           npm install @capacitor/android
           npm install @capacitor/geolocation
 
+      - name: Debug capacitor config
+        run: |
+          echo "=== Node version ==="
+          node --version
+          echo "=== npm version ==="
+          npm --version
+          echo "=== capacitor version ==="
+          npx @capacitor/cli --version
+          echo "=== capacitor.config.json ==="
+          cat capacitor.config.json
+          echo "=== package.json dependencies ==="
+          cat package.json | grep -A20 '"dependencies"'
+          echo "=== node_modules/@capacitor/cli ==="
+          ls -la node_modules/@capacitor/cli/ 2>/dev/null || echo "NOT FOUND"
+          ls -la node_modules/@capacitor/ 2>/dev/null || echo "@capacitor dir NOT FOUND"
+
       - name: Add Android platform
         run: |
           rm -rf android
-          npx cap add android
+          echo "=== Running cap add android ==="
+          npx @capacitor/cli add android --no-interactive
+          echo "=== cap add completed ==="
+          echo "=== android directory ==="
+          ls -la android/
+          echo "=== android/capacitor.config.json ==="
+          cat android/capacitor.config.json 2>/dev/null || echo "NOT FOUND"
 
       - name: Sync plugins and web assets
         run: npx cap sync android
@@ -102,7 +124,6 @@ jobs:
       - name: Build APK
         working-directory: android
         run: |
-          rm -rf ~/.gradle/caches/modules-2/files-2.1/com.amap.api 2>/dev/null || true
           chmod +x gradlew
           ./gradlew clean assembleRelease --refresh-dependencies \
             -Pandroid.injected.signing.store.file="${KEYSTORE_PATH}" \

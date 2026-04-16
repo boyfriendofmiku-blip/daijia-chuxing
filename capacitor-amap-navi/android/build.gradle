@@ -25,12 +25,12 @@ repositories {
 }
 
 dependencies {
-    // 高德地图基础定位 SDK（~3MB，精准GPS）
-    implementation 'com.amap.api:location:latest.integration'
+    // 高德地图基础定位 SDK
+    implementation 'com.amap.api:location:6.9.0'
 
-    // 高德地图 3D 地图 SDK（用于内嵌地图，~30MB）
-    implementation 'com.amap.api:3dmap:latest.integration'
+    // 高德地图 3D 地图 SDK
+    implementation 'com.amap.api:3dmap:10.0.600'
 
-    // 高德导航 SDK（~15MB，逐条语音导航，内嵌全屏导航视图）
-    implementation 'com.amap.api:navi-3dmap:latest.integration'
+    // 高德导航 SDK
+    implementation 'com.amap.api:navi-3dmap:10.0.600_3dmap10.0.600'
 }

@@ -57,19 +57,19 @@ jobs:
         run: |
           # 删除旧版本（如果存在）
           rm -rf node_modules/@capacitor/amap-navi
-          
+
           # 复制插件到 node_modules/@capacitor/ 目录
           mkdir -p node_modules/@capacitor
           cp -r capacitor-amap-navi node_modules/@capacitor/amap-navi
-          
+
           # 安装插件依赖
           cd node_modules/@capacitor/amap-navi
           npm install
-          
+
           # 编译 TypeScript
           npm run build
           cd ../../..
-          
+
           echo "=== 插件已链接并编译 ==="
           echo "验证 capacitor 字段:"
           grep -A2 '"capacitor"' node_modules/@capacitor/amap-navi/package.json || echo "ERROR: capacitor 字段不存在!"
@@ -89,19 +89,18 @@ jobs:
 
       - name: Inject Maven repos for Amap SDK into plugin build.gradle
         run: |
-          PLUGIN_BUILD="android/capacitor-amap-navi/build.gradle"
+          PLUGIN_BUILD="node_modules/@capacitor/amap-navi/android/build.gradle"
           if [ -f "$PLUGIN_BUILD" ]; then
-            # 在 repositories 块中添加阿里云 Maven 仓库
+            # 在 repositories 块中添加阿里云 Maven 仓库（如果还没有的话）
             if ! grep -q "maven.aliyun.com" "$PLUGIN_BUILD"; then
-              sed -i "/repositories {/a\\        maven { url 'https://maven.aliyun.com/repository/public' }" "$PLUGIN_BUILD"
-              sed -i "/repositories {/a\\        maven { url 'https://maven.aliyun.com/repository/google' }" "$PLUGIN_BUILD"
-              sed -i "/repositories {/a\\        maven { url 'https://maven.aliyun.com/repository/central' }" "$PLUGIN_BUILD"
+              # 使用 gnu sed 的 i 命令在 repositories { 之后插入
+              sed -i '/^repositories {$/a\        // 高德地图 SDK Maven 仓库（阿里云）\n        maven { url '\''https://maven.aliyun.com/repository/public'\'' }\n        maven { url '\''https://maven.aliyun.com/repository/google'\'' }\n        maven { url '\''https://maven.aliyun.com/repository/central'\'' }' "$PLUGIN_BUILD"
             fi
-            echo "=== 插件 build.gradle 已更新 ==="
+            echo "=== 插件 build.gradle 内容 ==="
             cat "$PLUGIN_BUILD"
           else
             echo "!!! 插件 build.gradle 不存在 !!!"
-            find android -name "build.gradle" -type f
+            find android node_modules -name "build.gradle" -type f 2>/dev/null | head -20
           fi
 
       - name: Inject Android permissions and network config into AndroidManifest.xml

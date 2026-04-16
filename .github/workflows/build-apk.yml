@@ -72,6 +72,11 @@ jobs:
       - name: Add Android platform
         run: |
           rm -rf android
+          echo "=== Running cap init ==="
+          npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
+          echo "=== cap init completed ==="
+          echo "=== capacitor.config.json ==="
+          cat capacitor.config.json
           echo "=== Running cap add android ==="
           npx cap add android
           echo "=== cap add completed ==="

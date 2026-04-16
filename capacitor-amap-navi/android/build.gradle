@@ -33,8 +33,4 @@ dependencies {
 
     // 高德导航 SDK（~15MB，逐条语音导航，内嵌全屏导航视图）
     implementation 'com.amap.api:navi-3dmap:latest.integration'
-
-    // Capacitor core
-    implementation 'com.getcapacitor:core:latest.integration'
-    annotationProcessor 'com.getcapacitor:core:latest.integration'
 }

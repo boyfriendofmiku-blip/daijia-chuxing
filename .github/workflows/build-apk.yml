@@ -68,8 +68,8 @@ jobs:
       - name: Manually add amap-navi plugin to settings.gradle
         run: |
           echo "=== 添加 amap-navi 到 settings.gradle ==="
-          # 使用 npm 安装后的路径
-          sed -i "/apply from: 'capacitor.settings.gradle'/i include ':capacitor-amap-navi'\nproject(':capacitor-amap-navi').projectDir = new File(rootProject.rootDir, '../node_modules/@capacitor/amap-navi/android')" android/settings.gradle
+          # 使用绝对路径指向 node_modules
+          sed -i "/apply from: 'capacitor.settings.gradle'/i include ':capacitor-amap-navi'\nproject(':capacitor-amap-navi').projectDir = new File(rootDir, '../node_modules/@capacitor/amap-navi/android')" android/settings.gradle
           cat android/settings.gradle
 
       - name: Add amap-navi to app/build.gradle

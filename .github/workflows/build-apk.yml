@@ -63,8 +63,7 @@ jobs:
           ls -la node_modules/@capacitor/amap-navi/android/
 
       - name: Initialize Capacitor
-        run: |
-          npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
+        run: npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
 
       - name: Add Android platform
         run: |
@@ -76,8 +75,6 @@ jobs:
 
       - name: Ensure Maven repos in build.gradle
         run: |
-          echo "=== 添加 Maven 仓库到 android/build.gradle ==="
-          # 在 allprojects.repositories 前添加阿里云和Google仓库
           sed -i "s|repositories {|repositories {\n        maven { url 'https://maven.aliyun.com/repository/google' }\n        maven { url 'https://maven.aliyun.com/repository/central' }\n        maven { url 'https://maven.aliyun.com/repository/public' }\n        maven { url 'https://dl.google.com/dl/android/maven2/' }|" android/build.gradle
           echo "=== 验证 build.gradle ==="
           grep -A10 "allprojects" android/build.gradle
@@ -85,39 +82,19 @@ jobs:
       - name: Configure AndroidManifest permissions
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          # 添加位置权限
           sed -i 's|</manifest>|  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />\n</manifest>|' "$MANIFEST"
-          # 添加网络配置
           sed -i 's|android:theme="@style/AppTheme">|android:theme="@style/AppTheme" android:usesCleartextTraffic="true">|' "$MANIFEST"
           echo "=== 权限配置完成 ==="
 
       - name: Create network security config
         run: |
           mkdir -p android/app/src/main/res/xml
-          cat > android/app/src/main/res/xml/network_security_config.xml << 'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true">
-        <trust-anchors>
-            <certificates src="system" />
-            <certificates src="user" />
-        </trust-anchors>
-    </base-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">webapi.amap.com</domain>
-        <domain includeSubdomains="true">restapi.amap.com</domain>
-        <domain includeSubdomains="true">m.amap.com</domain>
-        <domain includeSubdomains="true">www.amap.com</domain>
-        <domain includeSubdomains="true">uri.amap.com</domain>
-    </domain-config>
-</network-security-config>
-EOF
+          printf '<?xml version="1.0" encoding="utf-8"?>\n<network-security-config>\n    <base-config cleartextTrafficPermitted="true">\n        <trust-anchors>\n            <certificates src="system" />\n            <certificates src="user" />\n        </trust-anchors>\n    </base-config>\n    <domain-config cleartextTrafficPermitted="true">\n        <domain includeSubdomains="true">webapi.amap.com</domain>\n        <domain includeSubdomains="true">restapi.amap.com</domain>\n        <domain includeSubdomains="true">m.amap.com</domain>\n        <domain includeSubdomains="true">www.amap.com</domain>\n        <domain includeSubdomains="true">uri.amap.com</domain>\n    </domain-config>\n</network-security-config>\n' > android/app/src/main/res/xml/network_security_config.xml
           echo "=== network_security_config.xml 创建完成 ==="
 
       - name: Setup signing keystore
         run: |
           KEYSTORE_PATH="${GITHUB_WORKSPACE}/daijia-release.jks"
-
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$KEYSTORE_PATH"
           else
@@ -132,7 +109,6 @@ EOF
               -dname "CN=DaiJia, OU=App, O=DaiJia, L=China, ST=China, C=CN" \
               -noprompt
           fi
-
           echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> $GITHUB_ENV
 
       - name: Build APK

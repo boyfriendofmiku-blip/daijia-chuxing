@@ -54,6 +54,14 @@ jobs:
           npm install @capacitor/geolocation
           npm install @capacitor/app
 
+      - name: Build Capacitor plugin TypeScript
+        run: |
+          cd capacitor-amap-navi
+          npm install
+          npm run build
+          cd ..
+          ls capacitor-amap-navi/dist/
+
       - name: Initialize Capacitor
         run: npx cap init "代驾出行" "com.daijia.chuxing" --web-dir=www
 
@@ -77,6 +85,12 @@ jobs:
           echo "=== 添加 amap-navi 到 app/build.gradle ==="
           sed -i "/implementation project(':capacitor-cordova-android-plugins')/a\\    implementation project(':capacitor-amap-navi')" android/app/build.gradle
           grep -A15 "dependencies" android/app/build.gradle
+
+      - name: Inject real AMap API key into AndroidManifest
+        run: |
+          echo "=== 注入高德 API Key ==="
+          sed -i 's|YOUR_AMAP_API_KEY|${{ secrets.AMAP_API_KEY }}|' capacitor-amap-navi/android/src/main/AndroidManifest.xml
+          grep "com.amap.api.v2.apikey" capacitor-amap-navi/android/src/main/AndroidManifest.xml
 
       - name: Verify capacitor-amap-navi build.gradle
         run: |

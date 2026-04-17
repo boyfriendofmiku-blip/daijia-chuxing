@@ -2098,7 +2098,7 @@ async function renderNavMapPage(orderId) {
         '<div style="flex:1"></div>' +
         '<div id="nav-coords" style="font-size:11px;color:rgba(255,255,255,0.5)">--</div>' +
       '</div>' +
-      // 外部导航按钮（弹出导航选择器）
+      // 启动高德嵌入式全屏导航
       '<div style="display:flex;gap:10px">' +
         '<button id="nav-selector-btn" onclick="window._openNaviSelector()" style="flex:1;background:linear-gradient(135deg,#52c41a,#73d13d);color:#fff;padding:12px;border-radius:10px;font-size:14px;font-weight:600;border:none;box-shadow:0 2px 10px rgba(82,196,26,0.3);cursor:pointer;letter-spacing:1px">🧭 开始导航</button>' +
       '</div>' +
@@ -3971,178 +3971,40 @@ function _updateDriverMarker(dLat, dLng, order, map) {
 }
 
 // ============================================================
-//  导航启动器 - 使用 AmapNavi 原生插件
+//  导航启动器 - 高德嵌入式全屏导航（APK 内置 SDK，无需外部 App）
 // ============================================================
 
-/** 调起高德导航 App（原生逐条语音导航） */
-/** 打开导航选择器（多 App 兜底） */
-window._openNaviSelector = function() {
+/** 启动高德嵌入式全屏导航（App 内直接显示高德导航界面） */
+window._openNaviSelector = async function() {
   var s = _navMapState;
   if (!s) { showToast('请先进入导航页面', 'warning'); return; }
-
-  var targetLat = s.targetLat;
-  var targetLng = s.targetLng;
-  var targetName = s.targetName;
-  var mode = s.isRiding ? 'driving' : 'driving';
-
-  // 已存在的 selector 直接显示
-  var existing = document.getElementById('navi-selector-overlay');
-  if (existing) { existing.remove(); }
-
-  var overlay = document.createElement('div');
-  overlay.id = 'navi-selector-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0)';
-  overlay.onclick = function(e) {
-    if (e.target === overlay) overlay.remove();
-  };
-
-  var sheet = document.createElement('div');
-  sheet.style.cssText = 'width:100%;max-width:500px;background:#fff;border-radius:20px 20px 0 0;padding:0 0 env(safe-area-inset-bottom,0);animation:slideUp 0.25s ease-out';
-
-  var header = document.createElement('div');
-  header.style.cssText = 'text-align:center;padding:16px 20px 10px;border-bottom:1px solid #f0f0f0;position:relative';
-  header.innerHTML = '<div style="width:36px;height:4px;background:#ddd;border-radius:2px;position:absolute;top:8px;left:50%;transform:translateX(-50%)"></div><h3 style="margin:6px 0 0;font-size:16px;font-weight:600">选择导航方式</h3><p style="margin:2px 0 0;font-size:12px;color:#888">正在前往：' + escapeHtml(targetName) + '</p>';
-
-  var options = document.createElement('div');
-  options.style.cssText = 'padding:12px 16px;display:flex;flex-direction:column;gap:8px';
-
-  var isAndroid = /android/i.test(navigator.userAgent);
-
-  var apps = [
-    { id: 'amap',    icon: '🗺️', name: '高德地图',  desc: '推荐 · 精准语音导航',  color: '#07c160' },
-    { id: 'baidu',   icon: '🧭', name: '百度地图',  desc: '国内第二大导航',        color: '#1890ff' },
-    { id: 'apple',   icon: '🍎', name: 'Apple Maps', desc: isAndroid ? 'iPhone用户推荐' : '系统地图', color: '#333' },
-    { id: 'browser', icon: '🌐', name: '浏览器打开', desc: '无导航App时使用',      color: '#faad14' },
-  ];
-
-  apps.forEach(function(app) {
-    var btn = document.createElement('button');
-    btn.style.cssText = 'width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid #f0f0f0;border-radius:12px;background:#fff;cursor:pointer;text-align:left;transition:all 0.15s';
-    btn.onclick = function() {
-      overlay.remove();
-      _tryNaviApp(app.id);
-    };
-    btn.innerHTML = '<span style="font-size:28px">' + app.icon + '</span><span style="flex:1"><span style="display:block;font-size:15px;font-weight:600;color:#333">' + app.name + '</span><span style="display:block;font-size:12px;color:#888;margin-top:2px">' + app.desc + '</span></span><span style="font-size:18px;color:#ccc">›</span>';
-    options.appendChild(btn);
-  });
-
-  var cancelBtn = document.createElement('button');
-  cancelBtn.style.cssText = 'width:calc(100% - 32px);margin:8px 16px 16px;padding:14px;border:none;border-radius:12px;background:#f5f5f5;color:#666;font-size:15px;font-weight:500;cursor:pointer';
-  cancelBtn.textContent = '取消';
-  cancelBtn.onclick = function() { overlay.remove(); };
-
-  sheet.appendChild(header);
-  sheet.appendChild(options);
-  sheet.appendChild(cancelBtn);
-  overlay.appendChild(sheet);
-  document.body.appendChild(overlay);
-
-  // 点击外部也关闭
-  setTimeout(function() { document.addEventListener('click', _closeNaviSelectorOnOutside, false); }, 10);
-};
-
-function _closeNaviSelectorOnOutside(e) {
-  var overlay = document.getElementById('navi-selector-overlay');
-  if (overlay && !overlay.contains(e.target)) {
-    overlay.remove();
-    document.removeEventListener('click', _closeNaviSelectorOnOutside, false);
-  }
-}
-
-/** 尝试调起指定导航 App，多级兜底 */
-window._tryNaviApp = async function(appId) {
-  var s = _navMapState;
-  if (!s) return;
 
   var targetLat = s.targetLat;
   var targetLng = s.targetLng;
   var targetName = s.targetName;
   var myLat = s.myLat;
   var myLng = s.myLng;
+  var mode = s.isRiding ? 2 : 0; // 0=驾车 2=骑行
 
-  function _openUrl(url) {
-    if (window.CapacitorApp && window.CapacitorApp.openUrl) {
-      window.CapacitorApp.openUrl({ url: url });
-    } else {
-      window.open(url, '_blank');
-    }
-  }
-
-  // 构造各 App 的导航 URL
-  var urls = {
-    amap: 'amap://navi?sourceApplication=代驾出行&lat=' + targetLat + '&lon=' + targetLng + '&name=' + encodeURIComponent(targetName) + '&dev=1',
-    baidu: 'baidumap://map/direction?origin=latlng:' + myLat + ',' + myLng + '|name:我的位置&destination=latlng:' + targetLat + ',' + targetLng + '|name:' + encodeURIComponent(targetName) + '&mode=driving&coord_type=gcj02',
-    apple: 'http://maps.apple.com/?daddr=' + targetLat + ',' + targetLng + '&dirflg=d',
-    browser_amap: 'https://uri.amap.com/navigation?to=' + targetLng + ',' + targetLat + ',' + encodeURIComponent(targetName) + '&mode=car&callnative=1',
-    browser_baidu: 'https://api.map.baidu.com/dir?l=1&t=mode=driving&act=1&sy=0&snname=我的位置&snlat=' + myLat + '&sng=gcj02&sy=0&dnname=' + encodeURIComponent(targetName) + '&dlat=' + targetLat + '&dlng=' + targetLng + '&dg=gcj02',
-  };
-
-  if (appId === 'amap') {
-    // 优先用嵌入式全屏导航（App内直接显示高德导航界面）
-    if (window.AmapNavi && window.AmapNavi.startEmbeddedNavi) {
-      try {
-        var waypoints = [
-          { latitude: myLat, longitude: myLng, name: '我的位置' },
-          { latitude: targetLat, longitude: targetLng, name: targetName }
-        ];
-        var mode = s.isRiding ? 2 : 0;
-        // 初始化（如果还没初始化过）
-        if (!window.AmapNavi._initialized) {
-          var apiKey = (window._AMapConfig && window._AMapConfig.key) || '700c467755db139a0780ef3c86276a83';
-          await window.AmapNavi.initialize({ apiKey: apiKey });
-          window.AmapNavi._initialized = true;
-        }
-        var r = await window.AmapNavi.startEmbeddedNavi({ waypoints: waypoints, mode: mode });
-        if (r && r.success) { showToast('正在启动高德导航...', 'success'); return; }
-      } catch(e) { console.warn('[AmapNavi] 嵌入式导航调用失败，尝试兜底:', e); }
-    }
-    // 兜底：URL scheme 调起高德 App
-    _openUrl(urls.amap);
-    setTimeout(function() {
-      if (!document.hidden) showToast('已调起高德地图 🗺️', 'success');
-    }, 1500);
-    showToast('正在打开高德地图...', '');
+  if (!window.AmapNavi) {
+    showToast('导航模块未加载', 'error');
     return;
   }
 
-  if (appId === 'baidu') {
-    _openUrl(urls.baidu);
-    setTimeout(function() {
-      if (!document.hidden) showToast('已调起百度地图 🧭', 'success');
-    }, 1500);
-    showToast('正在打开百度地图...', '');
-    return;
+  showToast('正在启动高德导航...', '');
+  try {
+    await window.AmapNavi.startEmbeddedNavi({
+      waypoints: [
+        { latitude: myLat, longitude: myLng, name: '我的位置' },
+        { latitude: targetLat, longitude: targetLng, name: targetName }
+      ],
+      mode: mode
+    });
+    console.log('[Nav] 嵌入式导航已启动:', targetName);
+  } catch (e) {
+    console.error('[Nav] 启动导航失败:', e);
+    showToast('启动导航失败: ' + (e.message || e), 'error');
   }
-
-  if (appId === 'apple') {
-    _openUrl(urls.apple);
-    setTimeout(function() {
-      if (!document.hidden) showToast('已调起 Apple Maps 🍎', 'success');
-    }, 1500);
-    showToast('正在打开 Apple Maps...', '');
-    return;
-  }
-
-  if (appId === 'browser') {
-    // 浏览器打开高德网页版
-    var browserUrl = 'https://m.amap.com/navi/?start=' + myLng + ',' + myLat + '&end=' + targetLng + ',' + targetLat + '&navi=driving&ext=1';
-    _openUrl(browserUrl);
-    showToast('正在浏览器打开高德网页导航...', '');
-    return;
-  }
-};
-
-/** 调起 Apple Maps 导航 */
-window._doLaunchAppleNavi = function() {
-  var s = _navMapState;
-  if (!s) { showToast('请先进入导航页面', 'warning'); return; }
-  
-  var url = 'http://maps.apple.com/?daddr=' + s.targetLat + ',' + s.targetLng + '&dirflg=d';
-  var openFn = window.CapacitorApp && window.CapacitorApp.openUrl 
-    ? window.CapacitorApp.openUrl.bind(window.CapacitorApp) 
-    : function(url) { window.open(url, '_blank'); };
-  openFn(url);
-  showToast('正在打开 Apple Maps...', '');
 };
 
 // 清除追踪定时器（页面切走时调用）

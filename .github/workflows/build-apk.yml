@@ -78,14 +78,43 @@ jobs:
           sed -i "/implementation project(':capacitor-cordova-android-plugins')/a\\    implementation project(':capacitor-amap-navi')" android/app/build.gradle
           grep -A15 "dependencies" android/app/build.gradle
 
-      - name: Ensure Maven repos in build.gradle
+      - name: Inject Maven repos into android/build.gradle
         run: |
-          # 先备份原文件
-          cp android/build.gradle android/build.gradle.bak
-          # 在 buildscript repositories 之前添加主仓库
-          sed -i 's|buildscript {|buildscript {\n        repositories {\n            google()\n            mavenCentral()\n            maven { url "https://maven.aliyun.com/repository/google" }\n            maven { url "https://maven.aliyun.com/repository/central" }\n            maven { url "https://maven.aliyun.com/repository/public" }\n        }\n|;' android/build.gradle
-          # 在 allprojects repositories 之前添加主仓库
-          sed -i 's|allprojects {|allprojects {\n        repositories {\n            google()\n            mavenCentral()\n            maven { url "https://maven.aliyun.com/repository/google" }\n            maven { url "https://maven.aliyun.com/repository/central" }\n            maven { url "https://maven.aliyun.com/repository/public" }\n        }\n|;' android/build.gradle
+          python3 - << 'PYEOF'
+          import re
+
+          with open('android/build.gradle', 'r') as f:
+              content = f.read()
+
+          repos_block = '''    repositories {
+              google()
+              mavenCentral()
+              maven { url "https://dl.google.com/dl/android/maven2/" }
+              maven { url "https://maven.aliyun.com/repository/google" }
+              maven { url "https://maven.aliyun.com/repository/central" }
+              maven { url "https://maven.aliyun.com/repository/public" }
+          }'''
+
+          # 注入 buildscript > repositories
+          content = re.sub(
+              r'(buildscript\s*\{)',
+              r'\1\n' + repos_block,
+              content, count=1
+          )
+
+          # 注入 allprojects > repositories
+          content = re.sub(
+              r'(allprojects\s*\{)',
+              r'\1\n' + repos_block,
+              content, count=1
+          )
+
+          with open('android/build.gradle', 'w') as f:
+              f.write(content)
+
+          print("=== android/build.gradle (patched) ===")
+          print(content)
+          PYEOF
 
       - name: Configure AndroidManifest permissions
         run: |

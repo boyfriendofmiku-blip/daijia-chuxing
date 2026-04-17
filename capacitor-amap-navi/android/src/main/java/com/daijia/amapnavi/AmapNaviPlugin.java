@@ -13,10 +13,11 @@ import com.amap.api.location.AMapLocationClientOption;
 import com.amap.api.location.AMapLocationListener;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
-import com.getcapacitor.NativePlugin;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
 
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -35,12 +36,12 @@ import java.util.List;
  * - GPS 定位为原生级别，不受 WebView 限制
  * - 切后台时定位可持续
  */
-@NativePlugin(
+@CapacitorPlugin(
     name = "AmapNavi",
     permissions = {
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION"
+        @Permission(strings = {"android.permission.ACCESS_FINE_LOCATION"}, alias = "location"),
+        @Permission(strings = {"android.permission.ACCESS_COARSE_LOCATION"}, alias = "coarseLocation"),
+        @Permission(strings = {"android.permission.ACCESS_BACKGROUND_LOCATION"}, alias = "backgroundLocation")
     }
 )
 public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
@@ -50,6 +51,7 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
     private AMapLocationClientOption locationOption = null;
     private String currentApiKey = null;
     private boolean isTracking = false;
+    private PluginCall _pendingLocationCall = null;
 
     // ============================================================
     //  初始化
@@ -230,7 +232,9 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
             locationOption.setOnceLocation(true);
             locationClient.setLocationOption(locationOption);
             locationClient.startLocation();
-            call.setCallback("locationCallback", call.getCallbackId());
+            // 保存 call，位置回调时使用
+            this._pendingLocationCall = call;
+            call.setKeepAlive(true);
         } catch (Exception e) {
             call.reject("获取位置失败: " + e.getMessage());
         }
@@ -298,6 +302,10 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
         int errorCode = location.getErrorCode();
         if (errorCode != 0) {
             Log.w(TAG, "Location error: " + errorCode + " - " + location.getErrorInfo());
+            if (_pendingLocationCall != null) {
+                _pendingLocationCall.reject("定位失败: " + location.getErrorInfo());
+                _pendingLocationCall = null;
+            }
             return;
         }
 
@@ -309,11 +317,18 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
         data.put("accuracy", location.getAccuracy());
         data.put("timestamp", location.getTime());
 
-        notifyListeners("locationUpdate", data);
-
-        if (!isTracking && locationOption != null && locationOption.isOnceLocation()) {
-            locationClient.stopLocation();
+        // 一次性定位回调
+        if (_pendingLocationCall != null) {
+            _pendingLocationCall.resolve(data);
+            _pendingLocationCall = null;
+            if (!isTracking) {
+                locationClient.stopLocation();
+                return;
+            }
         }
+
+        // 持续追踪事件
+        notifyListeners("locationUpdate", data);
     }
 
     // ============================================================

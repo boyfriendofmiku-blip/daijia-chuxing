@@ -17,30 +17,18 @@ android {
     }
 }
 
-repositories {
-    mavenCentral()
-    google()
-    maven { url 'https://maven.aliyun.com/repository/public' }
-    maven { url 'https://maven.aliyun.com/repository/google' }
-    maven { url 'https://maven.aliyun.com/repository/central' }
-}
-
 dependencies {
-    // Capacitor core
-    implementation 'com.getcapacitor:core:8.3.0'
-    compileOnly 'com.getcapacitor:core:8.3.0'
+    // Capacitor core - 正确的 groupId 是 com.capacitorjs（不是 com.getcapacitor）
+    compileOnly 'com.capacitorjs:core:8.3.0'
 
     // AndroidX (必须)
     implementation 'androidx.annotation:annotation:1.7.1'
     implementation 'androidx.core:core:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
 
-    // 高德地图基础定位 SDK (6.1.0.3 稳定版)
-    implementation 'com.amap.api:location:6.1.0.3'
+    // 高德定位 SDK（Maven Central 上最新稳定版 6.4.5）
+    implementation 'com.amap.api:location:6.4.5'
 
-    // 高德地图 2D 地图 SDK (与导航 SDK 版本匹配)
-    implementation 'com.amap.api:map2d:6.1.0.3'
-
-    // 高德导航 SDK (6.1.0.3 稳定版，修复了 nvi 包名问题)
-    implementation 'com.amap.api:navi-3d:6.1.0.3'
+    // 高德导航 + 3D 地图合一 SDK（已包含地图能力，不需要单独引 map2d）
+    implementation 'com.amap.api:navi-3dmap:10.0.800'
 }

@@ -11,6 +11,14 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.amap.api.navi.AMapNavi;
+import com.amap.api.navi.AMapNaviListener;
+import com.amap.api.navi.AMapNaviView;
+import com.amap.api.navi.AMapNaviViewListener;
+import com.amap.api.navi.enums.NaviType;
+import com.amap.api.navi.model.AMapCalcRouteResult;
+import com.amap.api.navi.model.AMapNaviLocation;
+import com.amap.api.navi.model.AMapNaviRouteNotifyData;
 import com.amap.api.navi.model.AMapNaviTrafficFacilityInfo;
 import com.amap.api.navi.model.AimLessModeStat;
 import com.amap.api.navi.model.NaviInfo;
@@ -24,10 +32,10 @@ import com.amap.api.navi.model.NaviLatLng;
  *
  * API 适配说明（v10.0.800）：
  * - AMapNaviPoint → NaviLatLng (com.amap.api.navi.model)
- * - calculateDriveRoute 参数改为 NaviPoi / NaviLatLng 列表
- * - 策略常量改为 PathPlanningStrategy 枚举
- * - onCalculateRouteSuccess 回调参数改为 int[]
- * - 新增必需方法：OnUpdateTrafficFacility, onStopSpeaking, onGpsSignalWeak
+ * - calculateDriveRoute / WalkRoute / RideRoute 参数均为 NaviLatLng
+ * - onCalculateRouteSuccess 回调参数为 int[]
+ * - 新增必需方法：OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[])
+ * - onStopNavi / onEndEmulatorNavi / onStopSpeaking 在 v10 中已移除
  * - AMapNaviListener 与 AMapNaviViewListener 都有 onNaviCancel()，
  *   前者无参数，后者带 Object 参数，需分开实现
  */
@@ -227,9 +235,6 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
 
     // ---- v10.0.800 AMapNaviListener 其他回调（空实现） ----
 
-    @Override public void onEndEmulatorNavi() {}
-    @Override public void onStopNavi() { finish(); }
-
     @Override
     public void onCalculateRouteFailure(AMapCalcRouteResult result) {
         Log.e(TAG, "路线计算失败: " + result.getErrorCode() + " - " + result.getErrorDescription());
@@ -264,10 +269,8 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     @Override public void onNaviViewLoaded() {}
     @Override public void onMapTypeChanged(int type) {}
     @Override public void onNaviViewShowMode(int showMode) {}
-    @Override
-    public void onNaviInfoUpdate(NaviInfo naviInfo) {}
-    @Override
-    public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[] infos) {}
+    @Override public void onNaviInfoUpdate(NaviInfo naviInfo) {}
+    @Override public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[] infos) {}
 
     // ============================================================
     //  AMapNaviViewListener (v10.0.800)

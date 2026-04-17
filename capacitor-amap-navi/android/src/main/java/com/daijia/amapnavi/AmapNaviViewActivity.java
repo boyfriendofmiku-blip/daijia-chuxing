@@ -7,6 +7,8 @@ import android.os.Bundle;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.util.Arrays;
+
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -34,7 +36,7 @@ import com.amap.api.navi.model.NaviLatLng;
  * - AMapNaviPoint → NaviLatLng (com.amap.api.navi.model)
  * - calculateDriveRoute / WalkRoute / RideRoute 参数均为 NaviLatLng
  * - onCalculateRouteSuccess 回调参数为 int[]
- * - 新增必需方法：OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[])
+ * - 新增必需方法：OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo)（单个对象，非数组）
  * - onStopNavi / onEndEmulatorNavi / onStopSpeaking 在 v10 中已移除
  * - AMapNaviListener 与 AMapNaviViewListener 都有 onNaviCancel()，
  *   前者无参数，后者带 Object 参数，需分开实现
@@ -177,7 +179,7 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
                 navi.calculateRideRoute(startLatLng, endLatLng);
             } else {
                 // 驾车（代驾模式）
-                navi.calculateDriveRoute(startLatLng, endLatLng, 0);
+                navi.calculateDriveRoute(Arrays.asList(startLatLng), Arrays.asList(endLatLng), 0);
             }
 
             Log.i(TAG, "已发起路线计算: " + startName + " -> " + endName);
@@ -270,13 +272,12 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     @Override public void onMapTypeChanged(int type) {}
     @Override public void onNaviViewShowMode(int showMode) {}
     @Override public void onNaviInfoUpdate(NaviInfo naviInfo) {}
-    @Override public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[] infos) {}
+    @Override public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo info) {}
 
     // ============================================================
     //  AMapNaviViewListener (v10.0.800)
     // ============================================================
 
-    @Override
     public void onNaviCancel(Object o) {
         finish();
     }

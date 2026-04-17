@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.net.Uri;
+import android.os.Build;
 import android.util.Log;
 
 import com.amap.api.location.AMapLocation;
@@ -18,6 +19,9 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -35,6 +39,11 @@ import java.util.List;
  * - 逐条语音导航由高德 SDK 直接提供，App 内全屏显示，无需跳转
  * - GPS 定位为原生级别，不受 WebView 限制
  * - 切后台时定位可持续
+ *
+ * API 适配说明（v10.0.800）：
+ * - JSArray.getJSObject(int) → Capacitor JSArray 无此方法，需手动解析
+ * - setMockParse(boolean) → v10.0.800 中已移除
+ * - resolveActivity(pm, MATCH_DEFAULT_ONLY) → API 30+ 废弃第二参数
  */
 @CapacitorPlugin(
     name = "AmapNavi",
@@ -97,8 +106,9 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
         }
 
         try {
-            JSObject startPoint = waypointsArr.getJSObject(0);
-            JSObject endPoint   = waypointsArr.getJSObject(waypointsArr.length() - 1);
+            // v10.0.800: Capacitor JSArray 没有 getJSObject(int)，需手动解析
+            JSONObject startPoint = waypointsArr.getJSONObject(0);
+            JSONObject endPoint   = waypointsArr.getJSONObject(waypointsArr.length() - 1);
 
             double startLat = startPoint.getDouble("latitude");
             double startLng = startPoint.getDouble("longitude");
@@ -126,6 +136,9 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
             Log.i(TAG, "启动嵌入式导航: " + startName + " -> " + endName + " (type=" + naviType + ")");
             notifyListeners("naviStart", new JSObject());
             call.resolve(new JSObject().put("success", true));
+        } catch (JSONException e) {
+            Log.e(TAG, "startEmbeddedNavi JSON parse error", e);
+            call.reject("解析坐标数据失败: " + e.getMessage());
         } catch (Exception e) {
             Log.e(TAG, "startEmbeddedNavi error", e);
             call.reject("启动导航失败: " + e.getMessage());
@@ -153,7 +166,8 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
             List<String> latLngs = new ArrayList<>();
 
             for (int i = 0; i < waypointsArr.length(); i++) {
-                JSObject point = waypointsArr.getJSObject(i);
+                // v10.0.800: Capacitor JSArray 没有 getJSObject(int)，需用 getJSONObject
+                JSONObject point = waypointsArr.getJSONObject(i);
                 double lat = point.getDouble("latitude");
                 double lng = point.getDouble("longitude");
                 String name = point.optString("name", "");
@@ -194,6 +208,9 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
                 call.reject("未检测到高德地图 App，已打开网页版");
             }
 
+        } catch (JSONException e) {
+            Log.e(TAG, "launchNavi JSON parse error", e);
+            call.reject("解析坐标数据失败: " + e.getMessage());
         } catch (Exception e) {
             Log.e(TAG, "launchNavi error", e);
             call.reject("启动导航失败: " + e.getMessage());
@@ -214,9 +231,19 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
         call.resolve(new JSObject().put("installed", installed));
     }
 
+    /**
+     * 检查 Intent 是否可被处理
+     * v10.0.800: resolveActivity(pm) 在 API 30+ 不再接受第二参数
+     */
     private boolean isIntentAvailable(Context ctx, Intent intent) {
         PackageManager pm = ctx.getPackageManager();
-        return intent.resolveActivity(pm, PackageManager.MATCH_DEFAULT_ONLY) != null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+: 使用 PackageManager.resolveActivity
+            return pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) != null;
+        } else {
+            // Android 10 及以下
+            return intent.resolveActivity(pm) != null;
+        }
     }
 
     // ============================================================
@@ -288,7 +315,7 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
             locationOption.setOnceLocation(false);
             locationOption.setInterval(3000);
             locationOption.setNeedAddress(false);
-            locationOption.setMockParse(true);
+            // v10.0.800: setMockParse(true) 已移除，不再调用
             locationClient.setLocationListener(this);
         } catch (Exception e) {
             Log.e(TAG, "initLocationClient error", e);

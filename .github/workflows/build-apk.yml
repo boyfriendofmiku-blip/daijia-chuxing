@@ -68,8 +68,8 @@ jobs:
       - name: Manually add amap-navi plugin to settings.gradle
         run: |
           echo "=== 添加 amap-navi 到 settings.gradle ==="
-          # 使用绝对路径指向 node_modules
-          sed -i "/apply from: 'capacitor.settings.gradle'/i include ':capacitor-amap-navi'\nproject(':capacitor-amap-navi').projectDir = new File(rootDir, '../node_modules/@capacitor/amap-navi/android')" android/settings.gradle
+          # 插件在仓库根目录的 capacitor-amap-navi/android（不在 node_modules）
+          sed -i "/apply from: 'capacitor.settings.gradle'/i include ':capacitor-amap-navi'\nproject(':capacitor-amap-navi').projectDir = new File(rootDir, '../capacitor-amap-navi/android')" android/settings.gradle
           cat android/settings.gradle
 
       - name: Add amap-navi to app/build.gradle
@@ -77,6 +77,13 @@ jobs:
           echo "=== 添加 amap-navi 到 app/build.gradle ==="
           sed -i "/implementation project(':capacitor-cordova-android-plugins')/a\\    implementation project(':capacitor-amap-navi')" android/app/build.gradle
           grep -A15 "dependencies" android/app/build.gradle
+
+      - name: Verify capacitor-amap-navi build.gradle
+        run: |
+          echo "=== capacitor-amap-navi/android/build.gradle 内容 ==="
+          cat capacitor-amap-navi/android/build.gradle
+          echo "=== 确认高德SDK依赖版本 ==="
+          grep "amap" capacitor-amap-navi/android/build.gradle
 
       - name: Inject Maven repos into android/build.gradle
         run: |

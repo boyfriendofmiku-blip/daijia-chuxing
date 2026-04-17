@@ -11,27 +11,10 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.amap.api.maps.model.LatLng;
-import com.amap.api.navi.AMapNavi;
-import com.amap.api.navi.AMapNaviListener;
-import com.amap.api.navi.AMapNaviView;
-import com.amap.api.navi.AMapNaviViewListener;
-import com.amap.api.navi.enums.NaviType;
-import com.amap.api.navi.model.AMapCalcRouteResult;
-import com.amap.api.navi.model.AMapLaneInfo;
-import com.amap.api.navi.model.AMapNaviCameraInfo;
-import com.amap.api.navi.model.AMapNaviCross;
-import com.amap.api.navi.model.AMapNaviLocation;
-import com.amap.api.navi.model.AMapNaviPath;
-import com.amap.api.navi.model.AMapNaviRouteNotifyData;
 import com.amap.api.navi.model.AMapNaviTrafficFacilityInfo;
 import com.amap.api.navi.model.AimLessModeStat;
 import com.amap.api.navi.model.NaviInfo;
 import com.amap.api.navi.model.NaviLatLng;
-import com.amap.api.navi.model.NaviPoi;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 嵌入式高德导航 Activity
@@ -171,24 +154,22 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
         if (endName == null) endName = "目的地";
 
         try {
-            // v10.0.800: 使用 NaviPoi 和 NaviLatLng（替代已删除的 AMapNaviPoint）
-            NaviPoi startPoi = null;
+            // v10.0.800: 使用 NaviLatLng（替代已删除的 AMapNaviPoint）
+            NaviLatLng startLatLng = null;
             if (startLat != 0 && startLng != 0) {
-                startPoi = new NaviPoi(startName, "",
-                        new LatLng(startLat, startLng));
+                startLatLng = new NaviLatLng(startLng, startLat);
             }
-            NaviPoi endPoi = new NaviPoi(endName, "",
-                    new LatLng(endLat, endLng));
+            NaviLatLng endLatLng = new NaviLatLng(endLng, endLat);
 
             AMapNavi navi = AMapNavi.getInstance(this);
 
             if ("walking".equals(naviType)) {
-                navi.calculateWalkRoute(startPoi, endPoi);
+                navi.calculateWalkRoute(startLatLng, endLatLng);
             } else if ("riding".equals(naviType)) {
-                navi.calculateRideRoute(startPoi, endPoi);
+                navi.calculateRideRoute(startLatLng, endLatLng);
             } else {
                 // 驾车（代驾模式）
-                navi.calculateDriveRoute(startPoi, endPoi, null);
+                navi.calculateDriveRoute(startLatLng, endLatLng, 0);
             }
 
             Log.i(TAG, "已发起路线计算: " + startName + " -> " + endName);
@@ -234,7 +215,7 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     }
 
     @Override
-    public void onArriveDestination(boolean hasNextWayPoint) {
+    public void onArriveDestination() {
         Log.i(TAG, "到达目的地");
         Toast.makeText(this, "已到达目的地", Toast.LENGTH_SHORT).show();
         if (naviView != null) {
@@ -244,20 +225,10 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
         }
     }
 
-    @Override
-    public void onStartNavi(int naviType) {
-        Log.i(TAG, "开始导航，类型: " + naviType);
-    }
-
-    @Override
-    public void onStopNavi() {
-        Log.i(TAG, "停止导航");
-        finish();
-    }
-
     // ---- v10.0.800 AMapNaviListener 其他回调（空实现） ----
 
     @Override public void onEndEmulatorNavi() {}
+    @Override public void onStopNavi() { finish(); }
 
     @Override
     public void onCalculateRouteFailure(AMapCalcRouteResult result) {
@@ -293,10 +264,10 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     @Override public void onNaviViewLoaded() {}
     @Override public void onMapTypeChanged(int type) {}
     @Override public void onNaviViewShowMode(int showMode) {}
-    @Override public void onStopSpeaking() {}
-    @Override public void onNaviInfoUpdate(NaviInfo naviInfo) {}
     @Override
-    public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo info) {}
+    public void onNaviInfoUpdate(NaviInfo naviInfo) {}
+    @Override
+    public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[] infos) {}
 
     // ============================================================
     //  AMapNaviViewListener (v10.0.800)

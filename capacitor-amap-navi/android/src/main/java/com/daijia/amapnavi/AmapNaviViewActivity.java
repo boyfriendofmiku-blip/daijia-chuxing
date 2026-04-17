@@ -19,9 +19,14 @@ import com.amap.api.navi.AMapNaviView;
 import com.amap.api.navi.AMapNaviViewListener;
 import com.amap.api.navi.enums.NaviType;
 import com.amap.api.navi.model.AMapCalcRouteResult;
+import com.amap.api.navi.model.AMapLaneInfo;
+import com.amap.api.navi.model.AMapModelCross;
+import com.amap.api.navi.model.AMapNaviCross;
+import com.amap.api.navi.model.AMapNaviCameraInfo;
 import com.amap.api.navi.model.AMapNaviLocation;
 import com.amap.api.navi.model.AMapNaviRouteNotifyData;
 import com.amap.api.navi.model.AMapNaviTrafficFacilityInfo;
+import com.amap.api.navi.model.AMapServiceAreaInfo;
 import com.amap.api.navi.model.AimLessModeStat;
 import com.amap.api.navi.model.NaviInfo;
 import com.amap.api.navi.model.NaviLatLng;
@@ -191,79 +196,96 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     }
 
     // ============================================================
-    //  AMapNaviListener (v10.0.800)
+    //  AMapNaviListener — v10.0.800 全部 36 个抽象方法
+    //  来源：直接反编译 navi-3dmap-location-search-10.0.800_*.jar
     // ============================================================
 
-    @Override
-    public void onInitNaviFailure() {
-        Log.e(TAG, "导航初始化失败");
-        Toast.makeText(this, "导航初始化失败，请重试", Toast.LENGTH_SHORT).show();
-        finish();
-    }
+    // ---- 必须实现的业务方法 ----
 
-    @Override
-    public void onInitNaviSuccess() {
-        Log.i(TAG, "导航初始化成功，开始路径规划");
-        startNaviFromIntent();
+    @Override public void onInitNaviFailure() {
+        Log.e(TAG, "导航初始化失败"); Toast.makeText(this, "导航初始化失败，请重试", Toast.LENGTH_SHORT).show(); finish();
     }
-
-    @Override
-    public void onCalculateRouteFailure(int errorCode) {
+    @Override public void onInitNaviSuccess() {
+        Log.i(TAG, "导航初始化成功，开始路径规划"); startNaviFromIntent();
+    }
+    @Override public void onStartNavi(int naviType) {}
+    @Override public void onTrafficStatusUpdate() {}
+    @Override public void onCalculateRouteFailure(int errorCode) {
         Log.e(TAG, "路线计算失败: " + errorCode);
-        String msg = errorCode == 31 ? "无法找到路线，请检查起终点位置" : "路线计算失败";
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, errorCode == 31 ? "无法找到路线，请检查起终点位置" : "路线计算失败", Toast.LENGTH_SHORT).show();
     }
-
-    @Override
-    public void onCalculateRouteSuccess(int[] routeIds) {
+    @Override public void onReCalculateRouteForYaw() {}
+    @Override public void onReCalculateRouteForTrafficJam() {}
+    @Override public void onArrivedWayPoint(int wayPointIndex) {}
+    @Override public void onCalculateRouteSuccess(int[] routeIds) {
         Log.i(TAG, "路线计算成功，数量: " + routeIds.length);
-        try {
-            AMapNavi.getInstance(this).startNavi(NaviType.GPS);
-        } catch (Exception e) {
-            Log.e(TAG, "startNavi error", e);
-        }
+        try { AMapNavi.getInstance(this).startNavi(NaviType.GPS); } catch (Exception e) { Log.e(TAG, "startNavi error", e); }
+    }
+    @Override public void onArriveDestination() {
+        Log.i(TAG, "到达目的地"); Toast.makeText(this, "已到达目的地", Toast.LENGTH_SHORT).show();
+        if (naviView != null) naviView.postDelayed(this::finish, 2000); else finish();
     }
 
-    @Override
-    public void onArriveDestination() {
-        Log.i(TAG, "到达目的地");
-        Toast.makeText(this, "已到达目的地", Toast.LENGTH_SHORT).show();
-        if (naviView != null) {
-            naviView.postDelayed(this::finish, 2000);
-        } else {
-            finish();
-        }
-    }
+    // ---- 抽象回调（空实现） ----
 
-    // ---- v10.0.800 AMapNaviListener 其他回调（空实现） ----
-
-    @Override
-    public void onCalculateRouteFailure(AMapCalcRouteResult result) {
-        Log.e(TAG, "路线计算失败: " + result.getErrorCode() + " - " + result.getErrorDescription());
-    }
-
-    @Override
-    public void onCalculateRouteSuccess(AMapCalcRouteResult result) {
-        Log.i(TAG, "路线计算成功");
-        try {
-            AMapNavi.getInstance(this).startNavi(NaviType.GPS);
-        } catch (Exception e) {
-            Log.e(TAG, "startNavi error", e);
-        }
-    }
-
-    @Override public void onNaviRouteNotify(AMapNaviRouteNotifyData data) {}
-    @Override public void updateAimlessModeStatistics(AimLessModeStat stat) {}
-    @Override public void updateAimlessModeCongestionInfo(com.amap.api.navi.model.AimLessModeCongestionInfo info) {}
-    @Override public void onPlayRing(int i) {}
     @Override public void onLocationChange(AMapNaviLocation location) {}
     @Override public void onGetNavigationText(int type, String desc) {}
     @Override public void onGetNavigationText(String s) {}
+    @Override public void onEndEmulatorNavi() {}
     @Override public void onGpsOpenStatus(boolean open) {}
     @Override public void onGpsSignalWeak(boolean isWeak) {}
-    @Override public void onNaviSetting() {}
-    @Override public void onNaviMapMode(int i) {}
+    @Override public void onNaviInfoUpdate(NaviInfo naviInfo) {}
+
+    // ---- 电子眼 / 区间测速 ----
+    @Override public void updateCameraInfo(AMapNaviCameraInfo[] infos) {}
+    @Override public void updateIntervalCameraInfo(AMapNaviCameraInfo cameraInfo1, AMapNaviCameraInfo cameraInfo2, int time) {}
+    @Override public void onServiceAreaUpdate(AMapServiceAreaInfo[] serviceAreaInfos) {}
+
+    // ---- 路口放大图 / 模式切换 ----
+    @Override public void showCross(AMapNaviCross cross) {}
+    @Override public void hideCross() {}
+    @Override public void showModeCross(AMapModelCross cross) {}
+    @Override public void hideModeCross() {}
+
+    // ---- 车道信息 ----
+    @Override public void showLaneInfo(AMapLaneInfo[] laneInfos, byte[] laneBackgroundInfo, byte[] laneRecommendedInfo) {}
+    @Override public void showLaneInfo(AMapLaneInfo laneInfo) {}
+    @Override public void hideLaneInfo() {}
+
+    // ---- 偏航 / 重新规划 ----
+    @Override public void notifyParallelRoad(int i) {}
+
+    // ---- 导航播报 ----
+    @Override public void onPlayRing(int i) {}
+
+    // ---- 诱导图标 ----
+    @Override public void onNaviRouteNotify(AMapNaviRouteNotifyData data) {}
     @Override public void onNaviCancel() { finish(); }
+
+    // ---- OnUpdateTrafficFacility 两个重载——数组版=abstract，单个对象版=default ----
+    @Override public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[] infos) {}
+    public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo info) {}
+
+    // ---- 高速专家 ----
+    @Override public void updateAimlessModeStatistics(AimLessModeStat stat) {}
+    @Override public void updateAimlessModeCongestionInfo(com.amap.api.navi.model.AimLessModeCongestionInfo info) {}
+
+    // ---- 路线计算回调（新旧两组签名） ----
+    @Override public void onCalculateRouteFailure(AMapCalcRouteResult result) {
+        Log.e(TAG, "路线计算失败: " + result.getErrorCode() + " - " + result.getErrorDescription());
+    }
+    @Override public void onCalculateRouteSuccess(AMapCalcRouteResult result) {
+        Log.i(TAG, "路线计算成功"); try { AMapNavi.getInstance(this).startNavi(NaviType.GPS); } catch (Exception e) { Log.e(TAG, "startNavi error", e); }
+    }
+
+    // ============================================================
+    //  AMapNaviViewListener — v10.0.800 全部 11 个抽象方法
+    // ============================================================
+
+    @Override public void onNaviSetting() {}
+    @Override public void onNaviCancel() { finish(); }
+    @Override public boolean onNaviBackClick() { finish(); return true; }
+    @Override public void onNaviMapMode(int i) {}
     @Override public void onNaviTurnClick() {}
     @Override public void onNextRoadClick() {}
     @Override public void onScanViewButtonClick() {}
@@ -271,23 +293,4 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     @Override public void onNaviViewLoaded() {}
     @Override public void onMapTypeChanged(int type) {}
     @Override public void onNaviViewShowMode(int showMode) {}
-    @Override public void onNaviInfoUpdate(NaviInfo naviInfo) {}
-    @Override public void notifyParallelRoad(int i) {}
-    // v10: OnUpdateTrafficFacility 有两个重载——数组的是抽象方法，单个对象的是 default 方法
-    @Override public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[] infos) {}
-    public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo info) {}
-
-    // ============================================================
-    //  AMapNaviViewListener (v10.0.800)
-    // ============================================================
-
-    public void onNaviCancel(Object o) {
-        finish();
-    }
-
-    @Override
-    public boolean onNaviBackClick() {
-        finish();
-        return true;
-    }
 }

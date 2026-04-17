@@ -272,6 +272,7 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     @Override public void onMapTypeChanged(int type) {}
     @Override public void onNaviViewShowMode(int showMode) {}
     @Override public void onNaviInfoUpdate(NaviInfo naviInfo) {}
+    @Override public void notifyParallelRoad(int i) {}
     // v10: OnUpdateTrafficFacility 有两个重载——数组的是抽象方法，单个对象的是 default 方法
     @Override public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[] infos) {}
     public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo info) {}

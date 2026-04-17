@@ -13,9 +13,8 @@
     ]
   },
   "android": {
-    "allowMixedContent": true
-    // TODO: amap-navi 插件暂时禁用（高德SDK集成存在兼容性问题）
-    // "includePlugins": ["@capacitor/amap-navi"]
+    "allowMixedContent": true,
+    "includePlugins": ["@capacitor/amap-navi"]
   },
   "plugins": {
     "SplashScreen": {
@@ -24,8 +23,7 @@
       "showSpinner": false,
       "splashFullScreen": true,
       "splashImmersive": true
-    }
-    // TODO: AmapNavi配置暂时禁用
-    // "AmapNavi": { "apiKey": "700c467755db139a0780ef3c86276a83" }
+    },
+    "AmapNavi": { "apiKey": "700c467755db139a0780ef3c86276a83" }
   }
 }

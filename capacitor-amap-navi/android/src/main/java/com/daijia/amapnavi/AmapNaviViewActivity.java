@@ -36,7 +36,7 @@ import com.amap.api.navi.model.NaviLatLng;
  * - AMapNaviPoint → NaviLatLng (com.amap.api.navi.model)
  * - calculateDriveRoute / WalkRoute / RideRoute 参数均为 NaviLatLng
  * - onCalculateRouteSuccess 回调参数为 int[]
- * - 新增必需方法：OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo)（单个对象，非数组）
+ * - OnUpdateTrafficFacility 有两个重载：数组版(abstract) + 单个对象版(default)，需同时实现
  * - onStopNavi / onEndEmulatorNavi / onStopSpeaking 在 v10 中已移除
  * - AMapNaviListener 与 AMapNaviViewListener 都有 onNaviCancel()，
  *   前者无参数，后者带 Object 参数，需分开实现
@@ -272,7 +272,9 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     @Override public void onMapTypeChanged(int type) {}
     @Override public void onNaviViewShowMode(int showMode) {}
     @Override public void onNaviInfoUpdate(NaviInfo naviInfo) {}
-    @Override public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo info) {}
+    // v10: OnUpdateTrafficFacility 有两个重载——数组的是抽象方法，单个对象的是 default 方法
+    @Override public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo[] infos) {}
+    public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo info) {}
 
     // ============================================================
     //  AMapNaviViewListener (v10.0.800)

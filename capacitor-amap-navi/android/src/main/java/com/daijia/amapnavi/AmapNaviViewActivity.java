@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.amap.api.maps.model.LatLng;
 import com.amap.api.navi.AMapNavi;
 import com.amap.api.navi.AMapNaviListener;
 import com.amap.api.navi.AMapNaviView;
@@ -22,15 +23,12 @@ import com.amap.api.navi.model.AMapNaviCameraInfo;
 import com.amap.api.navi.model.AMapNaviCross;
 import com.amap.api.navi.model.AMapNaviLocation;
 import com.amap.api.navi.model.AMapNaviPath;
-import com.amap.api.navi.model.AMapNaviPoint;
 import com.amap.api.navi.model.AMapNaviRouteNotifyData;
 import com.amap.api.navi.model.AMapNaviTrafficFacilityInfo;
 import com.amap.api.navi.model.AimLessModeStat;
 import com.amap.api.navi.model.NaviInfo;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
+import com.amap.api.navi.model.NaviLatLng;
+import com.amap.api.navi.model.NaviPoi;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,10 +40,13 @@ import java.util.List;
  * 依赖：com.amap.api:navi-3dmap-location-search:10.0.800_3dmap10.0.800_loc6.4.5_sea9.7.2
  *
  * API 适配说明（v10.0.800）：
- * - AMapNaviPoint.fromLngLat() → AMapNaviPoint.create()
- * - 移除：AMapModelDigitizedBird, AMapNaviInfo, AMapNaviRoadFlagInfo, AMapNaviSetting
- * - 移除：getDriveStrategies(), getRouteIds(), TrafficFacilityInfo (com.autonavi.tbt)
- * - 新增必需方法：onGpsSignalWeak(boolean)
+ * - AMapNaviPoint → NaviLatLng (com.amap.api.navi.model)
+ * - calculateDriveRoute 参数改为 NaviPoi / NaviLatLng 列表
+ * - 策略常量改为 PathPlanningStrategy 枚举
+ * - onCalculateRouteSuccess 回调参数改为 int[]
+ * - 新增必需方法：OnUpdateTrafficFacility, onStopSpeaking, onGpsSignalWeak
+ * - AMapNaviListener 与 AMapNaviViewListener 都有 onNaviCancel()，
+ *   前者无参数，后者带 Object 参数，需分开实现
  */
 public class AmapNaviViewActivity extends Activity implements AMapNaviListener, AMapNaviViewListener {
 
@@ -53,7 +54,7 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     private static final int REQUEST_PERMISSION = 1001;
 
     private AMapNaviView naviView;
-    private int naviType = 0; // 0=驾车 1=步行 2=骑行
+    private String naviType = "driving"; // driving / walking / riding
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -156,7 +157,9 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
         double startLng = getIntent().getDoubleExtra("start_lng", 0);
         double endLat   = getIntent().getDoubleExtra("end_lat", 0);
         double endLng   = getIntent().getDoubleExtra("end_lng", 0);
-        String typeStr  = getIntent().getStringExtra("navi_type");
+        String startName = getIntent().getStringExtra("start_name");
+        String endName   = getIntent().getStringExtra("end_name");
+        this.naviType   = getIntent().getStringExtra("navi_type");
 
         if (endLat == 0 || endLng == 0) {
             Toast.makeText(this, "目的地坐标无效", Toast.LENGTH_SHORT).show();
@@ -164,23 +167,31 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
             return;
         }
 
-        try {
-            // v10.0.800: AMapNaviPoint.create(lng, lat) 工厂方法创建点
-            AMapNaviPoint startPoint = (startLat != 0 && startLng != 0)
-                    ? AMapNaviPoint.create(startLng, startLat)
-                    : null;
-            AMapNaviPoint endPoint = AMapNaviPoint.create(endLng, endLat);
+        if (startName == null) startName = "我的位置";
+        if (endName == null) endName = "目的地";
 
-            if ("walking".equals(typeStr)) {
-                AMapNavi.getInstance(this).calculateWalkRoute(startPoint, endPoint);
-            } else if ("riding".equals(typeStr)) {
-                AMapNavi.getInstance(this).calculateRideRoute(startPoint, endPoint);
-            } else {
-                // 驾车（代驾模式）- 使用默认策略
-                AMapNavi.getInstance(this).calculateDriveRoute(
-                    startPoint, endPoint, null, 0
-                );
+        try {
+            // v10.0.800: 使用 NaviPoi 和 NaviLatLng（替代已删除的 AMapNaviPoint）
+            NaviPoi startPoi = null;
+            if (startLat != 0 && startLng != 0) {
+                startPoi = new NaviPoi(startName, "",
+                        new LatLng(startLat, startLng));
             }
+            NaviPoi endPoi = new NaviPoi(endName, "",
+                    new LatLng(endLat, endLng));
+
+            AMapNavi navi = AMapNavi.getInstance(this);
+
+            if ("walking".equals(naviType)) {
+                navi.calculateWalkRoute(startPoi, endPoi);
+            } else if ("riding".equals(naviType)) {
+                navi.calculateRideRoute(startPoi, endPoi);
+            } else {
+                // 驾车（代驾模式）
+                navi.calculateDriveRoute(startPoi, endPoi, null);
+            }
+
+            Log.i(TAG, "已发起路线计算: " + startName + " -> " + endName);
         } catch (Exception e) {
             Log.e(TAG, "startNaviFromIntent error", e);
             Toast.makeText(this, "路径规划失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
@@ -189,7 +200,7 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     }
 
     // ============================================================
-    //  AMapNaviListener (v10.0.800 适配版)
+    //  AMapNaviListener (v10.0.800)
     // ============================================================
 
     @Override
@@ -206,15 +217,15 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     }
 
     @Override
-    public void onCalculateRouteFailure(AMapCalcRouteResult result) {
-        Log.e(TAG, "路线计算失败: " + result.getErrorCode() + " - " + result.getErrorDescription());
-        String msg = result.getErrorCode() == 31 ? "无法找到路线，请检查起终点位置" : "路线计算失败";
+    public void onCalculateRouteFailure(int errorCode) {
+        Log.e(TAG, "路线计算失败: " + errorCode);
+        String msg = errorCode == 31 ? "无法找到路线，请检查起终点位置" : "路线计算失败";
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
     }
 
     @Override
-    public void onCalculateRouteSuccess(AMapCalcRouteResult result) {
-        Log.i(TAG, "路线计算成功");
+    public void onCalculateRouteSuccess(int[] routeIds) {
+        Log.i(TAG, "路线计算成功，数量: " + routeIds.length);
         try {
             AMapNavi.getInstance(this).startNavi(NaviType.GPS);
         } catch (Exception e) {
@@ -244,9 +255,25 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
         finish();
     }
 
-    // ---- 以下为 v10.0.800 空实现接口 ----
+    // ---- v10.0.800 AMapNaviListener 其他回调（空实现） ----
 
     @Override public void onEndEmulatorNavi() {}
+
+    @Override
+    public void onCalculateRouteFailure(AMapCalcRouteResult result) {
+        Log.e(TAG, "路线计算失败: " + result.getErrorCode() + " - " + result.getErrorDescription());
+    }
+
+    @Override
+    public void onCalculateRouteSuccess(AMapCalcRouteResult result) {
+        Log.i(TAG, "路线计算成功");
+        try {
+            AMapNavi.getInstance(this).startNavi(NaviType.GPS);
+        } catch (Exception e) {
+            Log.e(TAG, "startNavi error", e);
+        }
+    }
+
     @Override public void onNaviRouteNotify(AMapNaviRouteNotifyData data) {}
     @Override public void updateAimlessModeStatistics(AimLessModeStat stat) {}
     @Override public void updateAimlessModeCongestionInfo(com.amap.api.navi.model.AimLessModeCongestionInfo info) {}
@@ -255,7 +282,6 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     @Override public void onGetNavigationText(int type, String desc) {}
     @Override public void onGetNavigationText(String s) {}
     @Override public void onGpsOpenStatus(boolean open) {}
-    // v10.0.800 新增必需方法
     @Override public void onGpsSignalWeak(boolean isWeak) {}
     @Override public void onNaviSetting() {}
     @Override public void onNaviMapMode(int i) {}
@@ -267,13 +293,17 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
     @Override public void onNaviViewLoaded() {}
     @Override public void onMapTypeChanged(int type) {}
     @Override public void onNaviViewShowMode(int showMode) {}
+    @Override public void onStopSpeaking() {}
+    @Override public void onNaviInfoUpdate(NaviInfo naviInfo) {}
+    @Override
+    public void OnUpdateTrafficFacility(AMapNaviTrafficFacilityInfo info) {}
 
     // ============================================================
-    //  AMapNaviViewListener (v10.0.800 适配版)
+    //  AMapNaviViewListener (v10.0.800)
     // ============================================================
 
     @Override
-    public void onNaviCancel() {
+    public void onNaviCancel(Object o) {
         finish();
     }
 

@@ -26,9 +26,7 @@ dependencies {
     implementation 'androidx.core:core:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
 
-    // 高德定位 SDK（Maven Central 上最新稳定版 6.4.5）
-    implementation 'com.amap.api:location:6.4.5'
-
-    // 高德导航 + 3D 地图合一 SDK（已包含地图能力，不需要单独引 map2d）
-    implementation 'com.amap.api:navi-3dmap:10.0.800'
+    // 高德官方融合包：导航 + 3D地图 + 定位 + 搜索 四合一，避免单独引入各包时的类冲突
+    // 版本格式：主版本_3dmap版本_loc版本_sea版本
+    implementation 'com.amap.api:navi-3dmap-location-search:10.0.800_3dmap10.0.800_loc6.4.5_sea9.7.2'
 }

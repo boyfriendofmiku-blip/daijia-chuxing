@@ -162,6 +162,40 @@
     },
 
     /**
+     * 启动嵌入式全屏导航（App 内直接显示高德导航界面）
+     * @param {Object} options
+     * @param {Array} options.waypoints - 途经点 [{latitude, longitude, name?}, ...]
+     *   第一个点=起点，最后一个点=终点
+     * @param {number} [options.mode=0] - 0=驾车 1=步行 2=骑行
+     */
+    async startEmbeddedNavi(options) {
+      if (!options || !options.waypoints || options.waypoints.length < 2) {
+        throw new Error('waypoints 至少需要起点和终点');
+      }
+      options.mode = options.mode || 0;
+
+      if (!this._plugin) {
+        // 浏览器环境：降级为外部 App 导航（无法内嵌）
+        _log('[AmapNavi] 浏览器环境不支持嵌入式导航，降级为外部导航');
+        return this.startNavigation(options);
+      }
+
+      try {
+        var result = await this._plugin.startEmbeddedNavi({
+          waypoints: options.waypoints,
+          mode: options.mode
+        });
+        _log('[AmapNavi] 嵌入式导航已启动:', result);
+        return result;
+      } catch (e) {
+        console.error('[AmapNavi] 嵌入式导航失败:', e);
+        // 降级到外部 App 导航
+        _log('[AmapNavi] 降级为外部 App 导航');
+        return this.startNavigation(options);
+      }
+    },
+
+    /**
      * 计算两点间距离（米）
      */
     async distance(from, to) {

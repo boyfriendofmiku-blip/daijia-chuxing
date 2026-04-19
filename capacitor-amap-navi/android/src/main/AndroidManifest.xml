@@ -14,10 +14,10 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <application>
-        <!-- 高德地图 API Key（构建时由 GitHub Actions 注入 secrets.AMAP_API_KEY） -->
+        <!-- 高德地图 API Key -->
         <meta-data
             android:name="com.amap.api.v2.apikey"
-            android:value="YOUR_AMAP_API_KEY" />
+            android:value="700c467755db139a0780ef3c86276a83" />
 
         <!-- 嵌入式高德导航 Activity -->
         <activity

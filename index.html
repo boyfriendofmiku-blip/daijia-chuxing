@@ -40,7 +40,7 @@
         var s = document.createElement('script');
         s.src = cdns[tried++];
         s.onload = function() {
-          console.log('Supabase SDK加载成功:', s.src);
+          _log('Supabase SDK加载成功:', s.src);
           window.dispatchEvent(new Event('supabase-loaded'));
         };
         s.onerror = function() {
@@ -60,7 +60,7 @@
     window.__amapLoadFailed = false;
     window.onAMapReady = function() {
       window.__amapReady = true;
-      console.log('[AMap] 高德地图API已就绪');
+      _log('[AMap] 高德地图API已就绪');
       window.dispatchEvent(new Event('amap-ready'));
     };
     // 高德地图加载超时（15秒）
@@ -88,7 +88,7 @@
     import('https://cdn.jsdelivr.net/npm/@capacitor/app@1/dist/esm/define/index.js')
       .then(function(module) {
         window.CapacitorApp = module.App;
-        console.log('[Capacitor] App 插件加载成功');
+        _log('[Capacitor] App 插件加载成功');
         window.dispatchEvent(new CustomEvent('capacitor-app-ready'));
       })
       .catch(function(e) {
@@ -114,7 +114,7 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').catch(err => {
-          console.log('SW 注册失败（不影响使用）:', err.message);
+          _log('SW 注册失败（不影响使用）:', err.message);
         });
       });
     }

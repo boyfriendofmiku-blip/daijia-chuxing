@@ -1,15 +1,15 @@
 // 高德地图 API 适配器
 // 用 AMap 替换 TMap
 
-console.log('[AMap] 适配器加载');
+_log('[AMap] 适配器加载');
 
 // 主函数定义
 function initOrderMap(opts) {
-  console.log('[AMap] initOrderMap 调用', opts);
+  _log('[AMap] initOrderMap 调用', opts);
   var mapDiv = document.getElementById(opts.mapDivId);
   if (!mapDiv) {
     console.warn('[AMap] mapDiv未找到:', opts.mapDivId);
-    return createFallbackMap(opts);
+    return _createFallbackMap(opts);
   }
   
   // 检查高德地图 API
@@ -17,30 +17,17 @@ function initOrderMap(opts) {
     console.warn('[AMap] 高德地图API未加载');
     var toolInfo = document.getElementById(opts.toolInfoId);
     if (toolInfo) toolInfo.textContent = '地图加载中...';
-    return createFallbackMap(opts);
+    return _createFallbackMap(opts);
   }
   
-  // 创建备用地图对象（用于获取路线信息）
-  function createFallbackMap(opts) {
-    return {
-      _getRouteInfo: function() {
-        // 尝试从DOM元素获取路线信息
-        var routeInfoEl = document.getElementById(opts.routeInfoId);
-        if (routeInfoEl && routeInfoEl._cachedRouteInfo) {
-          return routeInfoEl._cachedRouteInfo;
-        }
-        return { distance: 0, duration: 0 };
-      },
-      _cacheRouteInfo: function(info) {
-        var routeInfoEl = document.getElementById(opts.routeInfoId);
-        if (routeInfoEl) {
-          routeInfoEl._cachedRouteInfo = info;
-        }
-      }
-    };
-  }
-  
-  console.log('[AMap] 开始初始化地图');
+  // 创建共享返回对象，initMapWithPlugins 异步回调中会更新其值
+  var routeDistance = 0;
+  var routeDuration = 0;
+  var result = {
+    _getRouteInfo: function() {
+      return { distance: routeDistance, duration: routeDuration };
+    }
+  };
   
   // 需要异步加载的插件
   AMap.plugin([
@@ -49,18 +36,45 @@ function initOrderMap(opts) {
     'AMap.Driving', 
     'AMap.Geolocation'
   ], function() {
-    initMapWithPlugins(opts);
+    _initMapWithPlugins(opts, result, function(dist, dur) {
+      routeDistance = dist;
+      routeDuration = dur;
+    });
   });
   
-  function initMapWithPlugins(opts) {
-    console.log('[AMap] 插件加载完成');
+  // 同步返回 result 对象，插件加载后 _getRouteInfo 可获取最新值
+  return result;
+}
+
+// 备用地图对象（地图未加载时的 fallback）
+function _createFallbackMap(opts) {
+  return {
+    _getRouteInfo: function() {
+      var routeInfoEl = document.getElementById(opts.routeInfoId);
+      if (routeInfoEl && routeInfoEl._cachedRouteInfo) {
+        return routeInfoEl._cachedRouteInfo;
+      }
+      return { distance: 0, duration: 0 };
+    },
+    _cacheRouteInfo: function(info) {
+      var routeInfoEl = document.getElementById(opts.routeInfoId);
+      if (routeInfoEl) {
+        routeInfoEl._cachedRouteInfo = info;
+      }
+    }
+  };
+}
+
+function _initMapWithPlugins(opts, result, onRouteInfo) {
+    _log('[AMap] 插件加载完成');
     
+    var mapDiv = document.getElementById(opts.mapDivId);
+    if (!mapDiv) return;
+
     var selectMode = 'from';
     var fromMarker = null;
     var toMarker = null;
     var routeLine = null;
-    var routeDistance = 0;
-    var routeDuration = 0;
 
     // 初始化地图（默认广州）
     var map = new AMap.Map(mapDiv, {
@@ -203,22 +217,24 @@ function initOrderMap(opts) {
   }
 
   function updateRouteInfo(distance, duration) {
-    // 确保是有效数字
-    routeDistance = parseFloat(distance) || 0;
-    routeDuration = parseFloat(duration) || 0;
+    var dist = parseFloat(distance) || 0;
+    var dur = parseFloat(duration) || 0;
 
-    console.log('[AMap] updateRouteInfo - 距离:', routeDistance, '时间:', routeDuration);
+    _log('[AMap] updateRouteInfo - 距离:', dist, '时间:', dur);
+
+    // 通过回调更新外层闭包变量（供 _getRouteInfo 使用）
+    onRouteInfo(dist, dur);
 
     // 缓存到DOM元素，方便estimatePrice获取
     if (routeInfoEl) {
-      routeInfoEl._cachedRouteInfo = { distance: routeDistance, duration: routeDuration };
+      routeInfoEl._cachedRouteInfo = { distance: dist, duration: dur };
     }
 
     if (!routeInfoEl) return;
 
-    if (routeDistance > 0) {
-      var distKm = routeDistance >= 1000 ? (routeDistance / 1000).toFixed(1) + ' km' : routeDistance + ' m';
-      var durMin = Math.ceil(routeDuration / 60);
+    if (dist > 0) {
+      var distKm = dist >= 1000 ? (dist / 1000).toFixed(1) + ' km' : dist + ' m';
+      var durMin = Math.ceil(dur / 60);
       var durText = durMin >= 60 ? Math.floor(durMin / 60) + '小时' + (durMin % 60) + '分钟' : durMin + '分钟';
       routeInfoEl.innerHTML = '<div class="route-info-row"><span class="route-info-icon">🚗</span><span class="route-info-label">预估距离</span><span class="route-info-value">' + distKm + '</span></div>' +
         '<div class="route-info-row"><span class="route-info-icon">⏱️</span><span class="route-info-label">预计时间</span><span class="route-info-value">' + durText + '</span></div>';
@@ -230,8 +246,7 @@ function initOrderMap(opts) {
 
   function clearRoute() {
     if (routeLine) { routeLine.setMap(null); routeLine = null; }
-    routeDistance = 0;
-    routeDuration = 0;
+    onRouteInfo(0, 0);
     updateRouteInfo(0, 0);
   }
 
@@ -249,14 +264,14 @@ function initOrderMap(opts) {
     var fromPos = [parseFloat(fg.value), parseFloat(fl.value)];
     var toPos = [parseFloat(tg.value), parseFloat(tl.value)];
 
-    console.log('[AMap] 规划路线:', fromPos, '->', toPos);
+    _log('[AMap] 规划路线:', fromPos, '->', toPos);
 
     driving.search(fromPos, toPos, function(status, result) {
-      console.log('[AMap] 路线结果状态:', status, result);
+      _log('[AMap] 路线结果状态:', status, result);
 
       if (status === 'complete' && result.routes && result.routes.length > 0) {
         var route = result.routes[0];
-        console.log('[AMap] 路线数据:', route);
+        _log('[AMap] 路线数据:', route);
 
         // v2.0 API 距离和时间可能在不同的位置
         var distance = route.distance || 0;
@@ -274,7 +289,7 @@ function initOrderMap(opts) {
           }, 0);
         }
 
-        console.log('[AMap] 距离:', distance, '时间:', duration);
+        _log('[AMap] 距离:', distance, '时间:', duration);
         updateRouteInfo(distance, duration);
 
         // 绘制路线 - 尝试多种方式
@@ -293,7 +308,7 @@ function initOrderMap(opts) {
         }
 
         if (path && path.length > 0) {
-          console.log('[AMap] 绘制路线，点数:', path.length);
+          _log('[AMap] 绘制路线，点数:', path.length);
           routeLine = new AMap.Polyline({
             path: path,
             strokeColor: '#3777FF',
@@ -313,7 +328,7 @@ function initOrderMap(opts) {
           }
         }
       } else {
-        console.log('[AMap] 路线规划失败:', result);
+        _log('[AMap] 路线规划失败:', result);
         updateInfo('⚠️ 未找到合适路线');
       }
     });
@@ -440,10 +455,10 @@ function initOrderMap(opts) {
         return;
       }
       searchTimer = setTimeout(function() {
-        console.log('[AMap] 搜索关键词:', keyword);
+        _log('[AMap] 搜索关键词:', keyword);
         placeSearch.search(keyword, function(status, result) {
-          console.log('[AMap] 搜索结果状态:', status);
-          console.log('[AMap] 搜索结果:', JSON.stringify(result).substring(0, 500));
+          _log('[AMap] 搜索结果状态:', status);
+          _log('[AMap] 搜索结果:', JSON.stringify(result).substring(0, 500));
           if (status === 'complete' && result.poiList && result.poiList.pois && result.poiList.pois.length > 0) {
             var pois = result.poiList.pois;
             var html = pois.map(function(poi, idx) {
@@ -551,14 +566,7 @@ function initOrderMap(opts) {
     updateInfo('📍 浏览器不支持定位，请手动输入地址');
   }
 
-  return {
-    _getRouteInfo: function() {
-      return { distance: routeDistance, duration: routeDuration };
-    }
-  }; // 闭合 return 对象
-  } // 闭合 initMapWithPlugins 函数
-
-} // 闭合 initOrderMap 函数
+} // 闭合 _initMapWithPlugins 函数
 
 // 路线展示地图（订单详情用）
 function initRouteDisplayMap(mapDivId, fromLat, fromLng, toLat, toLng, options) {

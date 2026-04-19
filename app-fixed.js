@@ -4,7 +4,16 @@
 ================================================ */
 
 // 当前版本号（每次发布请更新）
-window.APP_VERSION = 'v2.3-20260414';
+window.APP_VERSION = 'v2.3-20260419';
+
+// 统一日志控制：生产环境自动静默，开发环境可通过 URL ?debug=1 开启
+window._APP_DEBUG = (window.location.search.indexOf('debug=1') >= 0) || (window.location.hash.indexOf('debug') >= 0);
+function _log(/* ...args */) {
+  if (window._APP_DEBUG) console.log.apply(console, arguments);
+}
+function _warn(/* ...args */) {
+  if (window._APP_DEBUG) console.warn.apply(console, arguments);
+}
 
 // 高德地图兼容层：让旧代码（TMap）兼容高德 API
 window.addEventListener('amap-ready', function() {
@@ -89,7 +98,7 @@ window.addEventListener('amap-ready', function() {
     }
   };
   window.__tmapReady = true;
-  console.log('高德地图已加载，TMap兼容层已启用');
+  _log('高德地图已加载，TMap兼容层已启用');
   window.dispatchEvent(new Event('tmap-ready'));
 });
 
@@ -124,7 +133,7 @@ window.onerror = function(msg, url, line, col, error) {
 
 // 检查地图API加载状态
 setTimeout(function() {
-  console.log('检查地图API状态:', typeof TMap, 'window.__tmapReady:', window.__tmapReady);
+  _log('检查地图API状态:', typeof TMap, 'window.__tmapReady:', window.__tmapReady);
   if (typeof TMap === 'undefined' && !window.__tmapReady) {
     console.warn('腾讯地图API加载超时，地图功能可能受限');
     // 如果地图API未加载，显示提示
@@ -136,7 +145,7 @@ setTimeout(function() {
 }, 5000); // 5秒后检查
 
 // 应用启动日志
-console.log('代驾出行应用启动，当前时间:', new Date().toLocaleTimeString());
+_log('代驾出行应用启动，当前时间:', new Date().toLocaleTimeString());
 
 // 确保地图API回调不会被覆盖
 if (!window._originalOnTMapReady) {
@@ -145,7 +154,7 @@ if (!window._originalOnTMapReady) {
 
 // 安全的回调包装
 window.onTMapReady = function() {
-  console.log('地图API回调执行');
+  _log('地图API回调执行');
   window.__tmapReady = true;
   window.dispatchEvent(new Event('tmap-ready'));
   
@@ -195,7 +204,7 @@ function openMapFullscreen() {
   }
   if (typeof AMap === 'undefined') {
     showToast('地图尚未加载完成，请稍候...', 'error');
-    console.log('[Map] AMap未定义，等待加载...');
+    _log('[Map] AMap未定义，等待加载...');
     // 尝试等待地图就绪
     if (window.__amapReady) {
       setTimeout(function() { openMapFullscreen(); }, 1000);
@@ -436,7 +445,7 @@ function estimatePrice(from, to) {
     if (routeInfo && routeInfo.duration) {
       duration = routeInfo.duration;
       durationMinutes = Math.ceil(duration / 60);
-      console.log('[estimatePrice] 从__orderMap获取时长:', duration, '秒 = ', durationMinutes, '分钟');
+      _log('[estimatePrice] 从__orderMap获取时长:', duration, '秒 = ', durationMinutes, '分钟');
     }
   }
 
@@ -446,13 +455,13 @@ function estimatePrice(from, to) {
     if (routeInfoEl && routeInfoEl._cachedRouteInfo && routeInfoEl._cachedRouteInfo.duration) {
       duration = routeInfoEl._cachedRouteInfo.duration;
       durationMinutes = Math.ceil(duration / 60);
-      console.log('[estimatePrice] 从DOM缓存获取时长:', duration, '秒 = ', durationMinutes, '分钟');
+      _log('[estimatePrice] 从DOM缓存获取时长:', duration, '秒 = ', durationMinutes, '分钟');
     }
   }
 
   // 如果还是0，说明没有路线规划，使用默认30分钟
   if (durationMinutes === 30 && duration === 0) {
-    console.log('[estimatePrice] 未获取到路线时长，使用默认30分钟');
+    _log('[estimatePrice] 未获取到路线时长，使用默认30分钟');
   }
 
   // 计算总价
@@ -465,7 +474,7 @@ function estimatePrice(from, to) {
     totalPrice = basePrice + extraPeriods * 20;
   }
 
-  console.log('[estimatePrice] 结算：', basePrice, '元起步 + 超时费 = ', totalPrice, '元 (时长:', durationMinutes, '分钟)');
+  _log('[estimatePrice] 结算：', basePrice, '元起步 + 超时费 = ', totalPrice, '元 (时长:', durationMinutes, '分钟)');
   return totalPrice;
 }
 
@@ -516,7 +525,7 @@ function requestNotificationPermission() {
   setTimeout(function() {
     Notification.requestPermission().then(function(permission) {
       if (permission === 'granted') {
-        console.log('浏览器通知权限已获取');
+        _log('浏览器通知权限已获取');
       }
     });
   }, 3000);
@@ -587,7 +596,7 @@ function navigate(page, params, skipHistory) {
   _isNavigating = true;
   State.currentPage = page;
   State.pageParams = params || {};
-  render();
+  await render();
 
   // 更新浏览器历史（支持原生返回按钮）
   if (!skipHistory) {
@@ -602,7 +611,7 @@ function initBackHandler() {
   window.addEventListener('popstate', function(e) {
     // 如果正在 navigate 过程中，跳过此 popstate（由 navigate 自身触发的）
     if (_isNavigating) {
-      console.log('[DEBUG] popstate skipped, navigate in progress');
+      _log('[DEBUG] popstate skipped, navigate in progress');
       return;
     }
     
@@ -633,13 +642,13 @@ function initBackHandler() {
   function setupCapacitorBackButton() {
     if (window.CapacitorApp && typeof window.CapacitorApp.addListener === 'function') {
       window.CapacitorApp.addListener('backButton', function(data) {
-        console.log('[Capacitor] backButton pressed');
+        _log('[Capacitor] backButton pressed');
         if (!goBack()) {
           // 返回失败（没有历史了），尝试退出
           tryExitApp();
         }
       });
-      console.log('[Capacitor] backButton listener registered');
+      _log('[Capacitor] backButton listener registered');
     } else {
       // Capacitor App 插件未加载，延迟重试或监听 ready 事件
       if (window.CapacitorApp === null) {
@@ -681,7 +690,7 @@ function tryExitApp() {
 
 // goBack 返回是否成功（是否有历史可返回）
 function goBack() {
-  console.log('[DEBUG] goBack called. pageHistory length:', State.pageHistory.length, 'currentPage:', State.currentPage);
+  _log('[DEBUG] goBack called. pageHistory length:', State.pageHistory.length, 'currentPage:', State.currentPage);
   // 清理当前页的追踪
   stopLiveTracking();
   stopArrivalCheck();
@@ -692,7 +701,7 @@ function goBack() {
     var prev = State.pageHistory.pop();
     State.currentPage = prev.page;
     State.pageParams = prev.params || {};
-    console.log('[DEBUG] goBack navigating to:', prev.page);
+    _log('[DEBUG] goBack navigating to:', prev.page);
     // 使用 replaceState 而不是 pushState，避免触发 popstate
     // 这样 URL 和页面状态保持同步，但不会触发浏览器历史的变化
     history.replaceState({ page: prev.page, params: prev.params }, '', '#' + prev.page);
@@ -1218,7 +1227,7 @@ var NAV_PHASE_RIDING = 'riding';   // 骑行去接客
 var NAV_PHASE_DRIVING = 'driving'; // 驾车送客
 
 function initNavMap(orderId, _retries) {
-  console.log('[NavMap] initNavMap 被调用, orderId:', orderId);
+  _log('[NavMap] initNavMap 被调用, orderId:', orderId);
   _retries = _retries || 0;
 
   if (typeof AMap === 'undefined') {
@@ -1239,7 +1248,7 @@ function initNavMap(orderId, _retries) {
 
   // 加载所有需要的插件
   AMap.plugin(['AMap.Driving', 'AMap.Riding', 'AMap.Walking', 'AMap.Geolocation'], function() {
-    console.log('[NavMap] 插件加载成功');
+    _log('[NavMap] 插件加载成功');
     _doInitNavMap(orderId, container);
   });
   
@@ -1290,7 +1299,7 @@ function _speak(text, force) {
   if (zhVoice) utterance.voice = zhVoice;
   // 即使没找到中文语音也尝试播放（系统会用默认语音）
   try { window.speechSynthesis.speak(utterance); } catch(e) {}
-  console.log('[NavMap] 语音播报:', text);
+  _log('[NavMap] 语音播报:', text);
 }
 
 // 切换语音开关
@@ -1347,13 +1356,13 @@ function _navInitError(msg) {
 }
 
 function _doInitNavMap(orderId, container) {
-  console.log('[NavMap] _doInitNavMap 被调用, orderId:', orderId);
+  _log('[NavMap] _doInitNavMap 被调用, orderId:', orderId);
 
   if (!orderId) { _navInitError('订单ID缺失，请返回重试'); return; }
   if (!container) { _navInitError('地图容器未找到，请返回重试'); return; }
 
   DB.getOrderById(orderId).then(function(order) {
-    console.log('[NavMap] 获取订单结果:', order ? '成功 status=' + order.status : '失败/null');
+    _log('[NavMap] 获取订单结果:', order ? '成功 status=' + order.status : '失败/null');
 
     if (!order) { _navInitError('订单不存在，请返回刷新'); return; }
 
@@ -1365,7 +1374,7 @@ function _doInitNavMap(orderId, container) {
     var fromName = order.from || '上车地点';
     var destName = order.to   || '目的地';
 
-    console.log('[NavMap] 坐标信息: from=', fromLat, fromLng, 'to=', destLat, destLng, 'status=', order.status);
+    _log('[NavMap] 坐标信息: from=', fromLat, fromLng, 'to=', destLat, destLng, 'status=', order.status);
 
     // 根据订单状态判断当前阶段
     var currentPhase;
@@ -1515,7 +1524,7 @@ function _doInitNavMap(orderId, container) {
       var newOrder = payload && payload.new;
       if (!newOrder || newOrder.id !== orderId) return;
       if (newOrder.status === 'ongoing' && _navMapState.phase === NAV_PHASE_RIDING) {
-        console.log('[NavMap] 订单状态变为 ongoing，切换到阶段2（代驾行驶）');
+        _log('[NavMap] 订单状态变为 ongoing，切换到阶段2（代驾行驶）');
         _switchNavPhase(NAV_PHASE_DRIVING);
       }
     });
@@ -1604,7 +1613,7 @@ function _updateNavPhaseUI(phase, targetName) {
 
 // 初始化定位
 function _initNavGeolocation(orderId) {
-  console.log('[NavMap] 开始初始化定位...');
+  _log('[NavMap] 开始初始化定位...');
   
   // 首先尝试从缓存获取位置
   var cachedLat = 0, cachedLng = 0;
@@ -1616,7 +1625,7 @@ function _initNavGeolocation(orderId) {
   
   // 最高优先：使用 AmapNavi 插件（高德原生 GPS + 可调起导航 App）
   if (window.AmapNavi && window.AmapNavi._plugin) {
-    console.log('[NavMap] 使用 AmapNavi 原生定位...');
+    _log('[NavMap] 使用 AmapNavi 原生定位...');
     AmapNavi.startTracking(function(loc) {
       if (!_navMapState || _navMapState.orderId !== orderId) return;
       _onNavLocationSuccess(loc.latitude, loc.longitude, loc.bearing || 0, orderId);
@@ -1634,14 +1643,14 @@ function _initNavGeolocation(orderId) {
 }
 
 function _initNavGeolocationFallback(orderId, cachedLat, cachedLng) {
-  console.log('[NavMap] 使用备用定位...');
+  _log('[NavMap] 使用备用定位...');
   
   // 次优先：使用 Capacitor 原生 Geolocation（APP 内真实 GPS）
   var capGeo = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
   if (capGeo) {
-    console.log('[NavMap] 使用 Capacitor 原生定位...');
+    _log('[NavMap] 使用 Capacitor 原生定位...');
     capGeo.getCurrentPosition({ enableHighAccuracy: true }).then(function(pos) {
-      console.log('[NavMap] Capacitor定位成功:', pos.coords.latitude, pos.coords.longitude);
+      _log('[NavMap] Capacitor定位成功:', pos.coords.latitude, pos.coords.longitude);
       _onNavLocationSuccess(pos.coords.latitude, pos.coords.longitude, pos.coords.heading || 0, orderId);
       // Capacitor无watchPosition，用setInterval模拟（5秒更新一次）
       if (_navMapState && _navMapState._capWatchId) clearInterval(_navMapState._capWatchId);
@@ -1664,7 +1673,7 @@ function _initNavGeolocationFallback(orderId, cachedLat, cachedLng) {
 
 function _fallbackBrowserGeo(orderId, cachedLat, cachedLng) {
   if (typeof AMap !== 'undefined' && AMap.Geolocation) {
-    console.log('[NavMap] 使用高德定位...');
+    _log('[NavMap] 使用高德定位...');
     var geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000, convert: true });
     geolocation.getCurrentPosition(function(status, result) {
       if (status === 'complete' && result.position) {
@@ -1686,7 +1695,7 @@ function _fallbackBrowserGeo(orderId, cachedLat, cachedLng) {
       }
     }, 12000);
   } else if (window.navigator.geolocation) {
-    console.log('[NavMap] 使用浏览器原生定位...');
+    _log('[NavMap] 使用浏览器原生定位...');
     window.navigator.geolocation.getCurrentPosition(
       function(pos) {
         _onNavLocationSuccess(pos.coords.latitude, pos.coords.longitude, pos.coords.heading || 0, orderId);
@@ -1705,13 +1714,13 @@ function _fallbackBrowserGeo(orderId, cachedLat, cachedLng) {
 function _usePositionForRoute(lat, lng, orderId) {
   if (!_navMapState || _navMapState.orderId !== orderId) return;
   
-  console.log('[NavMap] _usePositionForRoute:', lat, lng);
+  _log('[NavMap] _usePositionForRoute:', lat, lng);
   
   // 如果缓存没有位置，尝试使用订单出发地
   if (!lat || !lng) {
     DB.getOrderById(orderId).then(function(order) {
       if (order && order.fromLat && order.fromLng) {
-        console.log('[NavMap] 使用订单出发地:', order.fromLat, order.fromLng);
+        _log('[NavMap] 使用订单出发地:', order.fromLat, order.fromLng);
         _onNavLocationSuccess(parseFloat(order.fromLat), parseFloat(order.fromLng), 0, orderId);
       } else {
         // 最后后备：使用地图中心点（北京）
@@ -1726,7 +1735,7 @@ function _usePositionForRoute(lat, lng, orderId) {
 
 // 定位成功回调
 function _onNavLocationSuccess(lat, lng, heading, orderId) {
-  console.log('[NavMap] _onNavLocationSuccess 被调用:', lat, lng, heading, orderId);
+  _log('[NavMap] _onNavLocationSuccess 被调用:', lat, lng, heading, orderId);
   
   if (!_navMapState || _navMapState.orderId !== orderId) {
     console.warn('[NavMap] _navMapState 不匹配，跳过');
@@ -1738,7 +1747,7 @@ function _onNavLocationSuccess(lat, lng, heading, orderId) {
     return;
   }
   
-  console.log('[NavMap] 定位成功:', lat, lng, '朝向:', heading);
+  _log('[NavMap] 定位成功:', lat, lng, '朝向:', heading);
   
   // 更新标记位置和朝向
   _navMapState.driverMarker.setPosition([lng, lat]);
@@ -1795,7 +1804,7 @@ function _drawNavRoute(fromLat, fromLng) {
   var destLng = _navMapState.destLng;
   var destName = _navMapState.destName;
   
-  console.log('[NavMap] 开始规划路线:', fromLat, fromLng, '->', destLat, destLng);
+  _log('[NavMap] 开始规划路线:', fromLat, fromLng, '->', destLat, destLng);
   
   // 清除旧路线
   if (_navMapState.routeLine) {
@@ -1812,7 +1821,7 @@ function _drawNavRoute(fromLat, fromLng) {
 
   // 封装实际路线规划逻辑
   function doSearch() {
-    console.log('[NavMap] AMap.Driving 可用，开始搜索路线...');
+    _log('[NavMap] AMap.Driving 可用，开始搜索路线...');
     var policy = (AMap.DrivingPolicy && AMap.DrivingPolicy.LEAST_TIME) ? AMap.DrivingPolicy.LEAST_TIME : 0;
     _currentDriving = new AMap.Driving({
       policy: policy,
@@ -1830,7 +1839,7 @@ function _drawNavRoute(fromLat, fromLng) {
       
       if (status === 'complete' && result.routes && result.routes.length > 0) {
         var route = result.routes[0];
-        console.log('[NavMap] 路线规划成功');
+        _log('[NavMap] 路线规划成功');
         
         if (route.steps) {
           _navMapState.routeSteps = route.steps;
@@ -1883,9 +1892,9 @@ function _drawNavRoute(fromLat, fromLng) {
   if (typeof AMap.Driving !== 'undefined') {
     doSearch();
   } else {
-    console.log('[NavMap] AMap.Driving 未加载，正在加载插件...');
+    _log('[NavMap] AMap.Driving 未加载，正在加载插件...');
     AMap.plugin(['AMap.Driving'], function() {
-      console.log('[NavMap] AMap.Driving 加载完成');
+      _log('[NavMap] AMap.Driving 加载完成');
       doSearch();
     });
     // 插件加载超时后备
@@ -1948,7 +1957,7 @@ function _showSimpleRoute(fromLat, fromLng) {
   // 地图自适应
   _navMapState.map.setFitView();
   
-  console.log('[NavMap] 显示简单路线，距离:', dist);
+  _log('[NavMap] 显示简单路线，距离:', dist);
 }
 
 // 更新导航指令显示
@@ -2258,7 +2267,7 @@ async function renderDriverMain() {
 var _hallMapState = null; // { map, driverMarkers: {}, orderMarkers: {}, subscription }
 
 function initHallMap() {
-  console.log('[HallMap] 初始化接单大厅地图');
+  _log('[HallMap] 初始化接单大厅地图');
   
   if (typeof AMap === 'undefined') {
     setTimeout(function() { initHallMap(); }, 1000);
@@ -2437,7 +2446,7 @@ function _refreshHallMapData() {
         // 添加图例
         _updateHallMapLegend();
         
-        console.log('[HallMap] 刷新: ' + Object.keys(_hallMapState.driverMarkers).length + ' 司机, ' + Object.keys(_hallMapState.orderMarkers).length + ' 待接单');
+        _log('[HallMap] 刷新: ' + Object.keys(_hallMapState.driverMarkers).length + ' 司机, ' + Object.keys(_hallMapState.orderMarkers).length + ' 待接单');
       });
     });
   });
@@ -2487,15 +2496,15 @@ function _subscribeHallRealtime() {
   _hallMapState.subscription = supabaseClient
     .channel('hall-drivers')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_locations' }, function(payload) {
-      console.log('[HallMap] 司机位置更新:', payload);
+      _log('[HallMap] 司机位置更新:', payload);
       _refreshHallMapData();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, function(payload) {
-      console.log('[HallMap] 订单更新:', payload.eventType);
+      _log('[HallMap] 订单更新:', payload.eventType);
       _refreshHallMapData();
     })
     .subscribe(function(status) {
-      console.log('[HallMap] 实时订阅状态:', status);
+      _log('[HallMap] 实时订阅状态:', status);
     });
   
   // 定期刷新（每15秒保活）
@@ -2940,7 +2949,7 @@ function _actionDelegate(e) {
   e.stopPropagation();
   var action = el.dataset.action;
   var dataset = el.dataset;
-  console.log('[DEBUG] data-action clicked:', action, dataset);
+  _log('[DEBUG] data-action clicked:', action, dataset);
   handleAction(action, dataset);
 }
 
@@ -3071,17 +3080,17 @@ function _bindRestEvents() {
   
   // 为地图搜索框添加立即生效的基础事件
   if (searchInputEl) {
-    console.log('找到地图搜索框元素，添加基础事件');
+    _log('找到地图搜索框元素，添加基础事件');
     searchInputEl.removeAttribute('readonly');
     searchInputEl.addEventListener('click', function(e) {
       e.stopPropagation();
       searchInputEl.focus();
-      console.log('地图搜索框被点击');
+      _log('地图搜索框被点击');
     });
     searchInputEl.addEventListener('touchstart', function(e) {
       e.stopPropagation();
       searchInputEl.focus();
-      console.log('地图搜索框被触摸');
+      _log('地图搜索框被触摸');
     });
   }
   
@@ -3097,60 +3106,37 @@ function _bindRestEvents() {
     });
   }
   
-  // 为出发地和目的地输入框添加基础事件
-  var fromInputEl = document.getElementById('order-from');
-  var toInputEl = document.getElementById('order-to');
-  var drvFromEl = document.getElementById('drv-co-from');
-  var drvToEl = document.getElementById('drv-co-to');
-  
+  // 为出发地和目的地输入框添加基础事件（变量已在上方声明，此处复用）
   if (fromInputEl) {
-    console.log('找到出发地输入框，添加基础事件');
-    fromInputEl.removeAttribute('readonly');
-    fromInputEl.addEventListener('focus', function() {
-      console.log('出发地输入框获得焦点');
-    });
-    fromInputEl.addEventListener('input', function(e) {
-      console.log('出发地输入框输入:', e.target.value);
-    });
+    fromInputEl.addEventListener('focus', function() {});
+    fromInputEl.addEventListener('input', function(e) {});
   }
   
   if (toInputEl) {
-    console.log('找到目的地输入框，添加基础事件');
-    toInputEl.removeAttribute('readonly');
-    toInputEl.addEventListener('focus', function() {
-      console.log('目的地输入框获得焦点');
-    });
-    toInputEl.addEventListener('input', function(e) {
-      console.log('目的地输入框输入:', e.target.value);
-    });
+    toInputEl.addEventListener('focus', function() {});
+    toInputEl.addEventListener('input', function(e) {});
   }
   
   if (drvFromEl) {
-    drvFromEl.removeAttribute('readonly');
-    drvFromEl.addEventListener('focus', function() {
-      console.log('司机端出发地输入框获得焦点');
-    });
+    drvFromEl.addEventListener('focus', function() {});
   }
   
   if (drvToEl) {
-    drvToEl.removeAttribute('readonly');
-    drvToEl.addEventListener('focus', function() {
-      console.log('司机端目的地输入框获得焦点');
-    });
+    drvToEl.addEventListener('focus', function() {});
   }
   
   function doInitMaps() {
-    console.log('[Map] doInitMaps 执行');
+    _log('[Map] doInitMaps 执行');
     // 检查高德或腾讯地图API
     var mapReady = typeof TMap !== 'undefined' || typeof AMap !== 'undefined';
-    console.log('[Map] API状态 - TMap:', typeof TMap, 'AMap:', typeof AMap);
+    _log('[Map] API状态 - TMap:', typeof TMap, 'AMap:', typeof AMap);
     if (!mapReady) {
       console.warn('[Map] 地图API未就绪');
       return;
     }
     
     var orderMapEl = document.getElementById('order-map');
-    console.log('[Map] order-map元素:', orderMapEl);
+    _log('[Map] order-map元素:', orderMapEl);
     if (orderMapEl) {
       window.__orderMap = initOrderMap({
         mapDivId: 'order-map',
@@ -3700,7 +3686,7 @@ async function handleAction(action, dataset) {
     // 打开内嵌导航地图（司机端）
     case 'open-navigation-in-app': {
       var navOrderId2 = dataset.orderId;
-      console.log('[DEBUG] open-navigation-in-app clicked, orderId:', navOrderId2);
+      _log('[DEBUG] open-navigation-in-app clicked, orderId:', navOrderId2);
       navigate('nav-map', { orderId: navOrderId2 });
       break;
     }
@@ -3738,7 +3724,7 @@ async function initPageExtras() {
   // 如果地图已完全加载（__amapReady=true），直接初始化
   // 否则等待地图加载完成
   if (!window.__amapReady) {
-    console.log('[Map] 等待高德地图加载...');
+    _log('[Map] 等待高德地图加载...');
     await new Promise(function(resolve) {
       if (window.__amapReady) { resolve(); return; }
       var checkAmap = setInterval(function() {
@@ -3767,7 +3753,7 @@ async function initPageExtras() {
           var mapDiv = document.getElementById('detail-live-map');
           if (!mapDiv) {
             if (attempts < 10) {
-              console.log('[Map] detail-live-map 容器未就绪，等待中...', attempts);
+              _log('[Map] detail-live-map 容器未就绪，等待中...', attempts);
               setTimeout(function() { initLiveMapWithRetry(attempts + 1); }, 200);
             }
             return;
@@ -3775,12 +3761,12 @@ async function initPageExtras() {
           // 确保容器有尺寸
           if (mapDiv.clientWidth === 0 || mapDiv.clientHeight === 0) {
             if (attempts < 10) {
-              console.log('[Map] detail-live-map 容器尺寸为0，等待中...', attempts);
+              _log('[Map] detail-live-map 容器尺寸为0，等待中...', attempts);
               setTimeout(function() { initLiveMapWithRetry(attempts + 1); }, 200);
             }
             return;
           }
-          console.log('[Map] 初始化 detail-live-map 地图');
+          _log('[Map] 初始化 detail-live-map 地图');
           initLiveTrackMap(order);
         };
         setTimeout(function() { initLiveMapWithRetry(0); }, 100);
@@ -4000,7 +3986,7 @@ window._openNaviSelector = async function() {
       ],
       mode: mode
     });
-    console.log('[Nav] 嵌入式导航已启动:', targetName);
+    _log('[Nav] 嵌入式导航已启动:', targetName);
   } catch (e) {
     console.error('[Nav] 启动导航失败:', e);
     showToast('启动导航失败: ' + (e.message || e), 'error');
@@ -4086,17 +4072,17 @@ async function triggerAutoDispatch(orderId, fromLat, fromLng) {
   var DISPATCH_RADIUS = 500; // 米
   var DISPATCH_TIMEOUT = 30000; // 30秒自动放弃当前司机
 
-  console.log('[AutoDispatch] 查找附近司机，距离范围:', DISPATCH_RADIUS, '米');
+  _log('[AutoDispatch] 查找附近司机，距离范围:', DISPATCH_RADIUS, '米');
   var nearby = await DB.getNearbyDrivers(fromLat, fromLng, DISPATCH_RADIUS);
 
   if (nearby.length === 0) {
-    console.log('[AutoDispatch] 500米内无在线司机，等待大厅抢单');
+    _log('[AutoDispatch] 500米内无在线司机，等待大厅抢单');
     showToast('500米内暂无空闲司机，请等待大厅司机主动接单', '', 5000);
     return;
   }
 
   var driver = nearby[0];
-  console.log('[AutoDispatch] 派单给司机:', driver.name, '距离:', Math.round(driver.distance), '米');
+  _log('[AutoDispatch] 派单给司机:', driver.name, '距离:', Math.round(driver.distance), '米');
   showToast('系统已自动派单给附近司机 🚗', '', 4000);
 
   // 派单：设置 assigned_to 和过期时间
@@ -4129,7 +4115,7 @@ function _scheduleNextDriver(orderId, fromLat, fromLng, nearbyDrivers, startIdx)
   }
 
   if (startIdx >= nearbyDrivers.length) {
-    console.log('[AutoDispatch] 所有附近司机均未响应，等待大厅抢单');
+    _log('[AutoDispatch] 所有附近司机均未响应，等待大厅抢单');
     delete _autoDispatchTimers[orderId];
     return;
   }
@@ -4147,7 +4133,7 @@ function _scheduleNextDriver(orderId, fromLat, fromLng, nearbyDrivers, startIdx)
   localStorage.setItem('dj_dispatch_' + orderId, JSON.stringify(dispatchInfo));
   localStorage.setItem('dj_dispatch_for_' + driver.driverId, JSON.stringify(dispatchInfo));
 
-  console.log('[AutoDispatch] 派单给司机:', driver.name, '距离:', Math.round(driver.distance), '米');
+  _log('[AutoDispatch] 派单给司机:', driver.name, '距离:', Math.round(driver.distance), '米');
 
   _autoDispatchTimers[orderId] = setTimeout(async function() {
     var current = JSON.parse(localStorage.getItem('dj_dispatch_' + orderId) || '{}');
@@ -4257,21 +4243,27 @@ function clearLocalData() {
 let _orderSubscription = null;
 let _userSubscription = null;
 
+var _lastRealtimeRender = 0; // 防抖时间戳
+
 function startRealtime() {
-  // 监听订单变更，自动刷新当前页面
+  // 监听订单变更，自动刷新当前页面（增加防抖，避免死循环）
   _orderSubscription = DB.subscribeOrders(function(payload) {
     if (!State.currentUser) return;
-    // 如果在需要实时数据的页面，自动刷新
     var realtimePages = ['driver-main', 'order-hall', 'user-main', 'user-orders', 'driver-orders', 'staff-main', 'staff-orders'];
     if (realtimePages.indexOf(State.currentPage) >= 0) {
+      var now = Date.now();
+      if (now - _lastRealtimeRender < 2000) return; // 2秒内不重复刷新
+      _lastRealtimeRender = now;
       render();
     }
   });
 
   // 监听用户变更（上下线）
   _userSubscription = DB.subscribeUsers(function(payload) {
-    // 如果在订单大厅，刷新
     if (State.currentPage === 'order-hall' || State.currentPage === 'driver-main') {
+      var now = Date.now();
+      if (now - _lastRealtimeRender < 2000) return;
+      _lastRealtimeRender = now;
       render();
     }
   });
@@ -4308,7 +4300,7 @@ function _startApp() {
       try {
         var apiKey = (window._AMapConfig && window._AMapConfig.key) || '700c467755db139a0780ef3c86276a83';
         await window.AmapNavi.init(apiKey);
-        console.log('[AmapNavi] App启动时初始化成功');
+        _log('[AmapNavi] App启动时初始化成功');
       } catch(e) {
         console.warn('[AmapNavi] 初始化失败（可能是浏览器环境）:', e);
       }

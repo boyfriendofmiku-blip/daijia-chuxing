@@ -43,7 +43,7 @@
         await this._plugin.initialize({ apiKey });
         this._apiKey = apiKey;
         this._initialized = true;
-        console.log('[AmapNavi] 初始化成功');
+        _log('[AmapNavi] 初始化成功');
       } catch (e) {
         console.error('[AmapNavi] 初始化失败:', e);
         throw e;
@@ -85,7 +85,7 @@
           (last.name ? '(' + encodeURIComponent(last.name) + ')' : '') +
           '&mode=' + modeStr + '&callnative=1';
         window.open(url, '_blank');
-        console.log('[AmapNavi] 浏览器环境，打开高德网页: ' + url);
+        _log('[AmapNavi] 浏览器环境，打开高德网页: ' + url);
         return { success: true };
       }
 
@@ -94,7 +94,7 @@
           waypoints: options.waypoints,
           mode: options.mode
         });
-        console.log('[AmapNavi] 导航已启动:', result);
+        _log('[AmapNavi] 导航已启动:', result);
         return result;
       } catch (e) {
         console.error('[AmapNavi] 启动导航失败:', e);
@@ -131,7 +131,7 @@
         });
 
         this._tracking = true;
-        console.log('[AmapNavi] GPS 追踪已启动, trackingId:', this._trackingId);
+        _log('[AmapNavi] GPS 追踪已启动, trackingId:', this._trackingId);
       } catch (e) {
         console.error('[AmapNavi] 启动 GPS 失败:', e);
         // 降级到浏览器定位
@@ -158,7 +158,7 @@
       }
 
       this._tracking = false;
-      console.log('[AmapNavi] GPS 追踪已停止');
+      _log('[AmapNavi] GPS 追踪已停止');
     },
 
     /**

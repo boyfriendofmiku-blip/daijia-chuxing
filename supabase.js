@@ -360,7 +360,7 @@ const DB = {
       localOrders.unshift(localOrder);
       localStorage.setItem('dj_local_orders', JSON.stringify(localOrders));
     } catch(e) {}
-    console.log('订单已保存到本地存储（离线模式）:', localOrder.id);
+    _log('订单已保存到本地存储（离线模式）:', localOrder.id);
     return localOrder;
   },
 
@@ -684,8 +684,8 @@ window._sb = _sb;
 
 // 监听Supabase SDK加载成功事件，重新初始化client
 window.addEventListener('supabase-loaded', function() {
-  console.log('Supabase SDK加载成功，初始化client');
+  _log('Supabase SDK加载成功，初始化client');
   _sb = null; // 重置，让下次sb()调用重新创建
 });
 
-console.log('supabase.js加载完毕，DB对象已挂载到window.DB');
+_log('supabase.js加载完毕，DB对象已挂载到window.DB');

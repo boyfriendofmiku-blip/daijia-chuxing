@@ -208,15 +208,15 @@
     })
     .then(function(remoteInfo) {
       var remoteVer = remoteInfo.version || '0.0.0';
-      console.log('[Updater] 本地版本:', localVer, '服务器版本:', remoteVer);
+      _log('[Updater] 本地版本:', localVer, '服务器版本:', remoteVer);
 
       if (isNewer(remoteVer, localVer)) {
-        console.log('[Updater] 发现新版本，开始下载…');
+        _log('[Updater] 发现新版本，开始下载…');
         downloadAndCache(remoteInfo, function(info) {
           showReloadBar(info);
         });
       } else {
-        if (!silent) console.log('[Updater] 已是最新版本');
+        if (!silent) _log('[Updater] 已是最新版本');
       }
     })
     .catch(function(e) {

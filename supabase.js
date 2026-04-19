@@ -444,22 +444,32 @@ const DB = {
 
   // ============ 订阅实时订单变更 ============
   subscribeOrders(callback) {
-    return sb()
-      .channel('orders-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
-        callback(payload);
-      })
-      .subscribe();
+    try {
+      return sb()
+        .channel('orders-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+          callback(payload);
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn('[DB] subscribeOrders 失败（Supabase不可用），忽略:', e && e.message);
+      return { unsubscribe: function(){} };
+    }
   },
 
   // ============ 订阅用户变更（上下线） ============
   subscribeUsers(callback) {
-    return sb()
-      .channel('users-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
-        callback(payload);
-      })
-      .subscribe();
+    try {
+      return sb()
+        .channel('users-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
+          callback(payload);
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn('[DB] subscribeUsers 失败（Supabase不可用），忽略:', e && e.message);
+      return { unsubscribe: function(){} };
+    }
   },
 
   // ============ 司机位置 ============

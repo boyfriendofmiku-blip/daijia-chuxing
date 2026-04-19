@@ -150,7 +150,8 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
     // ============================================================
 
     /**
-     * 启动导航（调起高德 App，跳转到外部）
+     * 启动导航（调起高德 App，直接开始导航）
+     * 使用 androidamap://navi scheme，自动填入起终点并开始导航
      * @param waypoints 途经点列表（第一个=起点，最后一个=终点）
      * @param mode 0=驾车 1=步行 2=骑行
      */
@@ -163,48 +164,78 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
         }
 
         try {
-            List<String> latLngs = new ArrayList<>();
+            JSONObject startPoint = waypointsArr.getJSONObject(0);
+            JSONObject endPoint   = waypointsArr.getJSONObject(waypointsArr.length() - 1);
 
-            for (int i = 0; i < waypointsArr.length(); i++) {
-                // v10.0.800: Capacitor JSArray 没有 getJSObject(int)，需用 getJSONObject
-                JSONObject point = waypointsArr.getJSONObject(i);
-                double lat = point.getDouble("latitude");
-                double lng = point.getDouble("longitude");
-                String name = point.optString("name", "");
-                latLngs.add(lat + "," + lng + (!name.isEmpty() ? "(" + URLEncoder.encode(name, "UTF-8") + ")" : ""));
-            }
+            double startLat = startPoint.getDouble("latitude");
+            double startLng = startPoint.getDouble("longitude");
+            String startName = startPoint.optString("name", "我的位置");
+
+            double endLat = endPoint.getDouble("latitude");
+            double endLng = endPoint.getDouble("longitude");
+            String endName = endPoint.optString("name", "目的地");
 
             int mode = call.getInt("mode", 0);
-            String modeStr = "drive";
-            if (mode == 1) modeStr = "walk";
-            if (mode == 2) modeStr = "ride";
+            // 高德 navi scheme: 0=驾车, 2=公交, 4=步行, 6=骑行
+            int naviMode = 0;
+            if (mode == 2) naviMode = 6; // 骑行
+            else if (mode == 1) naviMode = 4; // 步行
 
-            StringBuilder uri = new StringBuilder("amapuri://route/plan/?");
-            uri.append("mode=").append(modeStr).append("&");
+            // 方案1: androidamap://navi — 直接启动导航（推荐）
+            // 坐标保留6位小数，避免精度问题
+            String sLat = String.format("%.6f", startLat);
+            String sLng = String.format("%.6f", startLng);
+            String eLat = String.format("%.6f", endLat);
+            String eLng = String.format("%.6f", endLng);
 
-            // 第一个点为起点 saddr，最后一个点为终点 daddr，中间为途经点
-            uri.append("saddr=").append(latLngs.get(0)).append("&");
-            uri.append("daddr=").append(latLngs.get(latLngs.size() - 1));
+            String naviUri = String.format(
+                "androidamap://navi?sourceApplication=代驾出行&poiname=%s&lat=%s&lon=%s&dev=0&style=%d",
+                URLEncoder.encode(startName, "UTF-8"), sLat, sLng, naviMode
+            );
 
-            uri.append("&dev=1");
-            uri.append("&sourceApplication=代驾出行");
+            // 方案2: amapuri://route/plan — 路线规划页面（带起终点）
+            String routeUri = String.format(
+                "amapuri://route/plan/?sourceApplication=代驾出行&mode=%s&slat=%s&slon=%s&sname=%s&dlat=%s&dlon=%s&dname=%s&dev=0",
+                naviMode == 6 ? "ride" : naviMode == 4 ? "walk" : "drive",
+                sLat, sLng, URLEncoder.encode(startName, "UTF-8"),
+                eLat, eLng, URLEncoder.encode(endName, "UTF-8")
+            );
 
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.addCategory(Intent.CATEGORY_DEFAULT);
-            intent.setData(Uri.parse(uri.toString()));
-            intent.setPackage("com.autonavi.minimap");
+            // 先尝试 androidamap://navi（直接导航，最简洁）
+            Intent naviIntent = new Intent(Intent.ACTION_VIEW);
+            naviIntent.addCategory(Intent.CATEGORY_DEFAULT);
+            naviIntent.setData(Uri.parse(naviUri));
 
-            if (isIntentAvailable(getContext(), intent)) {
-                getContext().startActivity(intent);
-                Log.i(TAG, "Launched Amap navi: " + uri);
+            if (isIntentAvailable(getContext(), naviIntent)) {
+                getContext().startActivity(naviIntent);
+                Log.i(TAG, "Launched Amap navi (direct): " + naviUri);
                 notifyListeners("naviStart", new JSObject());
-                call.resolve(new JSObject().put("success", true));
+                call.resolve(new JSObject().put("success", true).put("method", "direct-navi"));
             } else {
-                Intent webIntent = new Intent(Intent.ACTION_VIEW);
-                webIntent.setData(Uri.parse("https://uri.amap.com/navigation?to=&mode=" + modeStr + "&callnative=1"));
-                getContext().startActivity(webIntent);
-                Log.w(TAG, "Amap app not installed, opened web version");
-                call.reject("未检测到高德地图 App，已打开网页版");
+                // 降级到 amapuri://route/plan（路线规划页面）
+                Intent routeIntent = new Intent(Intent.ACTION_VIEW);
+                routeIntent.addCategory(Intent.CATEGORY_DEFAULT);
+                routeIntent.setData(Uri.parse(routeUri));
+
+                if (isIntentAvailable(getContext(), routeIntent)) {
+                    getContext().startActivity(routeIntent);
+                    Log.i(TAG, "Launched Amap route plan: " + routeUri);
+                    notifyListeners("naviStart", new JSObject());
+                    call.resolve(new JSObject().put("success", true).put("method", "route-plan"));
+                } else {
+                    // 最后降级到网页版
+                    String webUrl = String.format(
+                        "https://uri.amap.com/navigation?from=%s,%s(%s)&to=%s,%s(%s)&mode=%s&callnative=1",
+                        sLng, sLat, URLEncoder.encode(startName, "UTF-8"),
+                        eLng, eLat, URLEncoder.encode(endName, "UTF-8"),
+                        naviMode == 6 ? "ride" : naviMode == 4 ? "walk" : "bus"
+                    );
+                    Intent webIntent = new Intent(Intent.ACTION_VIEW);
+                    webIntent.setData(Uri.parse(webUrl));
+                    getContext().startActivity(webIntent);
+                    Log.w(TAG, "Amap app not installed, opened web: " + webUrl);
+                    call.resolve(new JSObject().put("success", true).put("method", "web"));
+                }
             }
 
         } catch (JSONException e) {

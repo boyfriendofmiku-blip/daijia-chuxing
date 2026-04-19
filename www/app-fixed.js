@@ -3983,9 +3983,21 @@ window._openNaviSelector = async function() {
   var targetLat = s.targetLat;
   var targetLng = s.targetLng;
   var targetName = s.targetName;
-  var myLat = s.myLat;
-  var myLng = s.myLng;
+  var myLat = s.myLat || 0;
+  var myLng = s.myLng || 0;
   var mode = s.isRiding ? 2 : 0; // 0=驾车 2=骑行
+
+  if (!targetLat || !targetLng) {
+    showToast('目标位置无效，无法导航', 'error');
+    return;
+  }
+
+  // 如果当前位置不可用，提示用户
+  if (!myLat || !myLng) {
+    showToast('GPS定位中，以目标位置为起点导航...', 'warning');
+    myLat = targetLat;
+    myLng = targetLng;
+  }
 
   if (!window.AmapNavi) {
     showToast('导航模块未加载', 'error');
@@ -4001,7 +4013,7 @@ window._openNaviSelector = async function() {
       ],
       mode: mode
     });
-    _log('[Nav] 嵌入式导航已启动:', targetName);
+    _log('[Nav] 嵌入式导航已启动:', targetName, 'mode:', mode);
   } catch (e) {
     console.error('[Nav] 启动导航失败:', e);
     showToast('启动导航失败: ' + (e.message || e), 'error');

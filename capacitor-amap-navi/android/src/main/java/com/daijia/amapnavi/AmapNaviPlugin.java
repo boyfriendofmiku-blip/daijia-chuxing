@@ -182,10 +182,9 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
             StringBuilder uri = new StringBuilder("amapuri://route/plan/?");
             uri.append("mode=").append(modeStr).append("&");
 
-            for (int i = 0; i < latLngs.size(); i++) {
-                uri.append("daddr=").append(latLngs.get(i));
-                if (i < latLngs.size() - 1) uri.append("&");
-            }
+            // 第一个点为起点 saddr，最后一个点为终点 daddr，中间为途经点
+            uri.append("saddr=").append(latLngs.get(0)).append("&");
+            uri.append("daddr=").append(latLngs.get(latLngs.size() - 1));
 
             uri.append("&dev=1");
             uri.append("&sourceApplication=代驾出行");

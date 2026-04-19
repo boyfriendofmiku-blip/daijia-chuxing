@@ -579,7 +579,7 @@ function loadingHtml() {
 // 用于防止 popstate 和 navigate/goBack 之间的竞态条件
 var _isNavigating = false;
 
-function navigate(page, params, skipHistory) {
+async function navigate(page, params, skipHistory) {
   // 切页时清理实时追踪、到达检测、导航地图
   stopLiveTracking();
   stopArrivalCheck();

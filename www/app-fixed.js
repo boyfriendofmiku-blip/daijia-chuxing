@@ -147,6 +147,21 @@ setTimeout(function() {
 // 应用启动日志
 _log('代驾出行应用启动，当前时间:', new Date().toLocaleTimeString());
 
+// App内主动请求定位权限（Android 运行时权限）
+if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+  (async function() {
+    try {
+      var Geolocation = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
+      if (Geolocation && Geolocation.requestPermissions) {
+        var perm = await Geolocation.requestPermissions();
+        _log('[App] 定位权限请求结果:', JSON.stringify(perm));
+      }
+    } catch(e) {
+      _warn('[App] 定位权限请求失败:', e);
+    }
+  })();
+}
+
 // 确保地图API回调不会被覆盖
 if (!window._originalOnTMapReady) {
   window._originalOnTMapReady = window.onTMapReady;

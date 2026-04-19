@@ -6,5 +6,9 @@ Thumbs.db
 android/
 *.apk
 generated-images/
+build/
 # 例外：插件的 android 目录需要提交
 !capacitor-amap-navi/android/
+!capacitor-amap-navi/android/**/src/
+!capacitor-amap-navi/android/**/build.gradle
+!capacitor-amap-navi/android/**/gradle.properties

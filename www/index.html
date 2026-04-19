@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>代驾出行</title>
 
+  <!-- 全局工具函数（必须在所有脚本之前） -->
+  <script>
+    window.APP_VERSION = 'v2.3-20260419';
+    window._APP_DEBUG = (window.location.search.indexOf('debug=1') >= 0) || (window.location.hash.indexOf('debug') >= 0);
+    function _log() { if (window._APP_DEBUG) console.log.apply(console, arguments); }
+    function _warn() { if (window._APP_DEBUG) console.warn.apply(console, arguments); }
+  </script>
+
   <!-- PWA 配置 -->
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#2C3E50" />

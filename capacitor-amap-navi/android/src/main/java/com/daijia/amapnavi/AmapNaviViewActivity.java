@@ -115,7 +115,7 @@ public class AmapNaviViewActivity extends Activity implements AMapNaviListener, 
         } catch (Exception e) {
             Log.w(TAG, "stopNavi error", e);
         }
-        super.onBackPressed();
+        finish(); // 关闭导航页面，返回 App
     }
 
     // ============================================================

@@ -130,9 +130,9 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
             intent.putExtra("start_name", startName);
             intent.putExtra("end_name",   endName);
             intent.putExtra("navi_type",  naviType);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            // 不用 NEW_TASK，保持在同一任务栈，按返回键能回到 App
 
-            getContext().startActivity(intent);
+            getActivity().startActivity(intent);
             Log.i(TAG, "启动嵌入式导航: " + startName + " -> " + endName + " (type=" + naviType + ")");
             notifyListeners("naviStart", new JSObject());
             call.resolve(new JSObject().put("success", true));
@@ -188,17 +188,23 @@ public class AmapNaviPlugin extends Plugin implements AMapLocationListener {
             String eLat = String.format("%.6f", endLat);
             String eLng = String.format("%.6f", endLng);
 
+            // androidamap://navi: poiname/lat/lon 是【终点】，slat/slon 是起点（可选）
             String naviUri = String.format(
-                "androidamap://navi?sourceApplication=代驾出行&poiname=%s&lat=%s&lon=%s&dev=0&style=%d",
-                URLEncoder.encode(startName, "UTF-8"), sLat, sLng, naviMode
+                "androidamap://navi?sourceApplication=%s&poiname=%s&lat=%s&lon=%s&slat=%s&slon=%s&dev=0&style=%d",
+                URLEncoder.encode("代驾出行", "UTF-8"),
+                URLEncoder.encode(endName, "UTF-8"), eLat, eLng,
+                sLat, sLng,
+                naviMode
             );
 
             // 方案2: amapuri://route/plan — 路线规划页面（带起终点）
+            // 正确参数名：sname/slat/slon（起点），dname/dlat/dlon（终点）
             String routeUri = String.format(
-                "amapuri://route/plan/?sourceApplication=代驾出行&mode=%s&slat=%s&slon=%s&sname=%s&dlat=%s&dlon=%s&dname=%s&dev=0",
-                naviMode == 6 ? "ride" : naviMode == 4 ? "walk" : "drive",
-                sLat, sLng, URLEncoder.encode(startName, "UTF-8"),
-                eLat, eLng, URLEncoder.encode(endName, "UTF-8")
+                "amapuri://route/plan/?sourceApplication=%s&t=%s&sname=%s&slat=%s&slon=%s&dname=%s&dlat=%s&dlon=%s&dev=0",
+                URLEncoder.encode("代驾出行", "UTF-8"),
+                naviMode == 6 ? "3" : naviMode == 4 ? "2" : "0",
+                URLEncoder.encode(startName, "UTF-8"), sLat, sLng,
+                URLEncoder.encode(endName, "UTF-8"), eLat, eLng
             );
 
             // 先尝试 androidamap://navi（直接导航，最简洁）

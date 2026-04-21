@@ -22,7 +22,9 @@
         <!-- 嵌入式高德导航 Activity -->
         <activity
             android:name=".AmapNaviViewActivity"
+            android:launchMode="singleTop"
             android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize"
             android:exported="false" />
 
         <!-- 高德地图服务 -->
